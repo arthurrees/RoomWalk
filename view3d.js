@@ -168,6 +168,7 @@ const matFurnCeramic = new THREE.MeshStandardMaterial({ color: 0xf0f2f4, roughne
 const matFurnDark = new THREE.MeshStandardMaterial({ color: 0x26282c, roughness: 0.5 });
 const matFurnMattress = new THREE.MeshStandardMaterial({ color: 0xeceef1, roughness: 0.9 });
 const matFurnCounter = new THREE.MeshStandardMaterial({ color: 0x7d6b56, roughness: 0.6 });
+const matFurnBasin = new THREE.MeshStandardMaterial({ color: 0xccd2d8, roughness: 0.35 });
 
 function box(w, h, d, mat, x = 0, y = 0, z = 0) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
@@ -175,6 +176,18 @@ function box(w, h, d, mat, x = 0, y = 0, z = 0) {
   m.castShadow = true;
   m.receiveShadow = true;
   return m;
+}
+
+// A recessed basin centered at local x=cx: the surface is built as a rim (four
+// strips around a hole) plus a sunk well bottom, so it reads as a real divot.
+function addBasin(g, cx, surfW, surfD, yTop, slabT, basinW, basinD, wellDepth, rimMat, wellMat) {
+  const frontD = (surfD - basinD) / 2;
+  const sideW = (surfW - basinW) / 2;
+  g.add(box(surfW, slabT, frontD, rimMat, cx, yTop - slabT / 2, -(surfD / 2 - frontD / 2)));
+  g.add(box(surfW, slabT, frontD, rimMat, cx, yTop - slabT / 2, (surfD / 2 - frontD / 2)));
+  g.add(box(sideW, slabT, basinD, rimMat, cx - (surfW / 2 - sideW / 2), yTop - slabT / 2, 0));
+  g.add(box(sideW, slabT, basinD, rimMat, cx + (surfW / 2 - sideW / 2), yTop - slabT / 2, 0));
+  g.add(box(basinW, slabT * 0.7, basinD, wellMat, cx, yTop - wellDepth, 0));
 }
 
 // Build a furniture group sized in feet, origin at footprint center on floor.
@@ -228,53 +241,77 @@ function buildFurnitureGroup(dims) {
       break;
     }
     case 'toilet': {
-      const tankD = d * 0.3;
-      g.add(box(w, h * 0.7, tankD, matFurnCeramic, 0, h * 0.35, -d / 2 + tankD / 2)); // tank
-      const bowl = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.5, w * 0.45, h * 0.4, 18), matFurnCeramic);
-      bowl.position.set(0, h * 0.2, d * 0.12); bowl.castShadow = true; g.add(bowl);
+      const tankD = d * 0.28;
+      g.add(box(w * 0.9, h * 0.72, tankD, matFurnCeramic, 0, h * 0.4, -d / 2 + tankD / 2)); // tank
+      g.add(box(w * 0.5, h * 0.4, d * 0.5, matFurnCeramic, 0, h * 0.2, d * 0.08));           // pedestal
+      const bowl = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.46, w * 0.36, h * 0.3, 20), matFurnCeramic);
+      bowl.position.set(0, h * 0.55, d * 0.12); bowl.castShadow = true; g.add(bowl);
+      const seat = new THREE.Mesh(new THREE.TorusGeometry(w * 0.4, w * 0.12, 12, 22), matFurnCeramic); // seat ring
+      seat.rotation.x = Math.PI / 2; seat.position.set(0, h * 0.7, d * 0.12); g.add(seat);
+      const innerBowl = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.3, w * 0.22, h * 0.12, 18), matFurnBasin);
+      innerBowl.position.set(0, h * 0.64, d * 0.12); g.add(innerBowl);                       // bowl divot
       break;
     }
     case 'sink': {
-      g.add(box(w, h * 0.85, d, matFurnWood, 0, h * 0.85 / 2, 0));           // vanity cabinet
-      g.add(box(w, h * 0.15, d, matFurnCeramic, 0, h * 0.85 + h * 0.075, 0)); // basin top
-      // one recessed basin per unit
-      const bw = (w / count) * 0.6;
+      g.add(box(w, h * 0.82, d, matFurnWood, 0, h * 0.41, 0)); // vanity cabinet
+      const yTop = h, slabT = h * 0.1, bayW = w / count;
       for (let i = 0; i < count; i++) {
-        const cx = -w / 2 + (i + 0.5) * (w / count);
-        g.add(box(bw, h * 0.06, d * 0.6, matFurnDark, cx, h * 0.86, 0));
+        const cx = -w / 2 + (i + 0.5) * bayW;
+        addBasin(g, cx, bayW, d, yTop, slabT, bayW * 0.62, d * 0.6, 0.16, matFurnCeramic, matFurnBasin);
+        g.add(box(0.1, 0.36, 0.1, matFurnMetal, cx, yTop + 0.18, -d * 0.32));                 // faucet
+        g.add(box(0.1, 0.08, 0.2, matFurnMetal, cx, yTop + 0.34, -d * 0.32 + 0.1));            // spout
       }
       break;
     }
     case 'tub': {
-      g.add(box(w, h, d, matFurnCeramic, 0, h / 2, 0));
-      g.add(box(w * 0.88, h * 0.5, d * 0.78, matFurnDark, 0, h * 0.6, 0));    // recessed basin
+      const wallT = Math.min(w, d) * 0.12;
+      g.add(box(w, h * 0.2, d, matFurnCeramic, 0, h * 0.1, 0));                       // floor
+      g.add(box(w, h, wallT, matFurnCeramic, 0, h / 2, -d / 2 + wallT / 2));          // back wall
+      g.add(box(w, h, wallT, matFurnCeramic, 0, h / 2, d / 2 - wallT / 2));           // front wall
+      g.add(box(wallT, h, d, matFurnCeramic, -w / 2 + wallT / 2, h / 2, 0));          // left wall
+      g.add(box(wallT, h, d, matFurnCeramic, w / 2 - wallT / 2, h / 2, 0));           // right wall
+      g.add(box(w - wallT * 2, h * 0.04, d - wallT * 2, matFurnBasin, 0, h * 0.21, 0)); // inner well floor
+      const drain = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.04, 12), matFurnMetal);
+      drain.position.set(w * 0.3, h * 0.22, 0); g.add(drain);
+      g.add(box(0.12, 0.4, 0.12, matFurnMetal, -w / 2 + wallT + 0.12, h + 0.2, 0));   // faucet
       break;
     }
     case 'stove': {
       g.add(box(w, h * 0.9, d, matFurnAppliance, 0, h * 0.45, 0));           // body
       g.add(box(w * 0.96, h * 0.06, d * 0.96, matFurnDark, 0, h * 0.93, 0)); // cooktop
+      const br = Math.min(w, d) * 0.16;
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+        const burner = new THREE.Mesh(new THREE.CylinderGeometry(br, br, 0.04, 18), matFurnMetal);
+        burner.position.set(sx * w * 0.26, h * 0.97, sz * d * 0.22); g.add(burner);
+      }
+      g.add(box(w * 0.72, 0.08, 0.06, matFurnMetal, 0, h * 0.5, d / 2 + 0.02)); // oven handle
       break;
     }
     case 'counter': {
-      g.add(box(w, h * 0.92, d, matFurnWood, 0, h * 0.46, 0));               // cabinet
-      g.add(box(w, h * 0.08, d, matFurnCounter, 0, h * 0.96, 0));            // countertop
-      // cabinet-bay seams
-      for (let i = 1; i < count; i++) {
+      g.add(box(w, h * 0.92, d, matFurnWood, 0, h * 0.46, 0)); // cabinet
+      const yTop = h, slabT = h * 0.08;
+      for (let i = 1; i < count; i++) { // cabinet-bay seams
         const sx = -w / 2 + i * (w / count);
         g.add(box(0.04, h * 0.9, d, matFurnDark, sx, h * 0.46, 0));
       }
       if (dims.sink) {
-        const bw = (w / count) * 0.6;
+        const bayW = w / count;
         for (let i = 0; i < count; i++) {
-          const cx = -w / 2 + (i + 0.5) * (w / count);
-          g.add(box(bw, h * 0.06, d * 0.6, matFurnDark, cx, h * 0.97, 0)); // sink basin per bay
+          const cx = -w / 2 + (i + 0.5) * bayW;
+          addBasin(g, cx, bayW, d, yTop, slabT, bayW * 0.6, d * 0.6, 0.16, matFurnCounter, matFurnBasin);
+          g.add(box(0.1, 0.34, 0.1, matFurnMetal, cx, yTop + 0.17, -d * 0.32)); // faucet
         }
+      } else {
+        g.add(box(w, slabT, d, matFurnCounter, 0, yTop - slabT / 2, 0)); // full countertop
       }
       break;
     }
-    case 'appliance':
+    case 'appliance': {
       g.add(box(w, h, d, matFurnAppliance, 0, h / 2, 0));
+      g.add(box(0.08, h * 0.5, 0.08, matFurnMetal, w * 0.38, h * 0.52, d / 2 + 0.04)); // handle
+      if (h > 4) g.add(box(w * 0.98, 0.04, 0.02, matFurnDark, 0, h * 0.62, d / 2 + 0.02)); // fridge door seam
       break;
+    }
     case 'box':
     default: {
       const mat = dims.dark ? matFurnDark : matFurnWood;
