@@ -1,4 +1,4 @@
-# Floor Plan Designer
+# RoomWalk
 
 Browser-based floor plan designer. Upload a 2D apartment floor plan, trace walls
 over it, place doors/windows and to-scale furniture, then view/walk the result
