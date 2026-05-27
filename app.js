@@ -4,7 +4,7 @@ import {
   clearWalls, clearOpenings, clearFurniture, deleteSelection, armFurniture,
 } from './state.js';
 import { wallLengthPx, parseLength, formatLength, formatArea, FT_PER_M } from './geom.js';
-import { CATALOG, CATEGORIES, getItem, applyResize, sizeNote } from './furniture.js';
+import { CATALOG, CATEGORIES, getItem, applyResize, sizeNote, bedSizeName } from './furniture.js';
 import { resolveAgainstWalls } from './collision.js';
 import * as view2d from './view2d.js';
 import * as view3d from './view3d.js';
@@ -83,12 +83,15 @@ subscribe(() => {
   document.getElementById('palette').hidden = state.tool !== 'furniture';
   paletteBody.querySelectorAll('.palette-item').forEach(b =>
     b.classList.toggle('armed', b.dataset.id === state.placingFurniture));
-  // hide hint when image loaded or walls exist
-  const hint = document.getElementById('hint-2d');
-  if (hint) {
-    if (state.image || state.walls.length) hint.style.display = 'none';
-    else hint.style.display = '';
-  }
+  // Declutter the bottom center: hide the hint pills (and walk instructions)
+  // whenever an item is selected so only the editing panel shows there.
+  const editing = !!state.selection;
+  const hint2 = document.getElementById('hint-2d');
+  if (hint2) hint2.style.display = (editing || state.image || state.walls.length) ? 'none' : '';
+  const hint3 = document.getElementById('hint-3d');
+  if (hint3) hint3.style.display = editing ? 'none' : '';
+  const walkInstr = document.querySelector('.walk-instructions');
+  if (walkInstr) walkInstr.style.display = editing ? 'none' : '';
 });
 
 // --- File upload (image) ---
@@ -111,6 +114,17 @@ fileInput.addEventListener('change', (e) => {
   };
   reader.readAsDataURL(file);
   fileInput.value = '';
+});
+
+// --- Help / how-to dropdown ---
+const helpBtn = document.getElementById('help-btn');
+const helpMenu = document.getElementById('help-menu');
+helpBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  helpMenu.hidden = !helpMenu.hidden;
+});
+document.addEventListener('click', (e) => {
+  if (!helpMenu.contains(e.target) && e.target !== helpBtn) helpMenu.hidden = true;
 });
 
 // --- Save / Open project ---
@@ -570,7 +584,7 @@ window.addEventListener('keydown', (e) => {
     else if (k === 'w') setTool('wall');
     else if (k === 'd') setTool('door');
     else if (k === 'r') setTool('window');
-    else if (k === 's') setTool('select');
+    else if (k === 'i') setTool('furniture');
   }
   if (k === 'delete' || k === 'backspace') {
     if (state.selection) { e.preventDefault(); deleteSelection(); }
@@ -604,16 +618,8 @@ function nudgeFurniture(axis, dir) {
   if (!f) return;
   const item = getItem(f.type);
   if (!item || item.resize === 'fixed') return;
-  if (item.resize === 'snap') {
-    // step through standard sizes (bed: twin/full/queen/king)
-    let idx = 0, best = Infinity;
-    item.sizes.forEach((s, i) => { const dd = Math.abs(s.w - f.w); if (dd < best) { best = dd; idx = i; } });
-    const ni = Math.max(0, Math.min(item.sizes.length - 1, idx + dir));
-    f.w = item.sizes[ni].w; f.d = item.sizes[ni].d;
-    emit();
-    return;
-  }
-  const stepFt = (axis === 'w' && item.resize === 'units') ? item.unitW : 0.5;
+  // Smooth, tiny 1-inch steps for every resizable item — no snapping.
+  const stepFt = 1 / 12;
   const cur = axis === 'w' ? f.w : f.d;
   const next = applyResize(item, axis, cur + dir * stepFt, { w: f.w, d: f.d });
   f.w = next.w; f.d = next.d;
@@ -622,15 +628,33 @@ function nudgeFurniture(axis, dir) {
 }
 
 function updateItemPanel() {
-  const f = selectedFurniture();
-  if (!f) { itemPanel.hidden = true; return; }
-  const item = getItem(f.type);
-  itemPanel.hidden = false;
-  const note = sizeNote(item, f.w);
-  document.getElementById('ip-title').textContent = note ? `${item.label} ${note}` : item.label;
-  document.getElementById('ip-w').textContent = formatLength(f.w, state.units);
-  document.getElementById('ip-d').textContent = formatLength(f.d, state.units);
-  document.getElementById('ip-size').style.display = item.resize === 'fixed' ? 'none' : '';
+  const sel = state.selection;
+  const sizeRow = document.getElementById('ip-size');
+  const rotateBtn = itemPanel.querySelector('[data-act="rotate"]');
+  if (sel?.kind === 'furniture') {
+    const f = state.furniture.find(x => x.id === sel.id);
+    const item = f && getItem(f.type);
+    if (!item) { itemPanel.hidden = true; return; }
+    itemPanel.hidden = false;
+    let title = item.label;
+    if (item.kind === 'bed') title = `${item.label} · ${bedSizeName(f.w)}`;
+    else { const note = sizeNote(item, f.w); if (note) title = `${item.label} ${note}`; }
+    document.getElementById('ip-title').textContent = title;
+    document.getElementById('ip-w').textContent = formatLength(f.w, state.units);
+    document.getElementById('ip-d').textContent = formatLength(f.d, state.units);
+    sizeRow.style.display = item.resize === 'fixed' ? 'none' : '';
+    rotateBtn.style.display = '';
+  } else if (sel?.kind === 'opening') {
+    const o = state.openings.find(x => x.id === sel.id);
+    if (!o) { itemPanel.hidden = true; return; }
+    itemPanel.hidden = false;
+    document.getElementById('ip-title').textContent =
+      `${o.type === 'door' ? 'Door' : 'Window'} · ${formatLength(o.width, state.units)} wide`;
+    sizeRow.style.display = 'none';
+    rotateBtn.style.display = 'none';
+  } else {
+    itemPanel.hidden = true;
+  }
 }
 
 function rotateFurniture90() {

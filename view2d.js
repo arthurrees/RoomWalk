@@ -6,7 +6,7 @@ import {
   DEFAULT_DOOR_WIDTH_FT, DEFAULT_WINDOW_WIDTH_FT, formatLength,
 } from './geom.js';
 import { getItem, unitCount, applyResize, sizeNote } from './furniture.js';
-import { resolveAgainstWalls, recomputeClips } from './collision.js';
+import { resolveAgainstWalls, fitBetweenWalls, recomputeClips } from './collision.js';
 
 // ThinkPad-inspired palette: matte near-black, graphite reference lines,
 // ThinkPad red as the single accent for the user's own geometry.
@@ -709,10 +709,13 @@ canvas.addEventListener('mousedown', (e) => {
   }
 
   if (state.tool === 'furniture') {
-    // Click to drop the armed item; stay armed for multiple drops.
+    // Drop the armed item, then switch to select so it's ready to adjust.
     if (state.placingFurniture) {
       const f = addFurniture(state.placingFurniture, p.x, p.y, state.placingRot);
-      resolveAgainstWalls(f);
+      fitBetweenWalls(f);
+      state.placingFurniture = null;
+      state.tool = 'pan';
+      state.selection = { kind: 'furniture', id: f.id };
       emit();
     }
     return;

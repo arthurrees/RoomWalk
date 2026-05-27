@@ -2,7 +2,7 @@
 // Walls are modeled as thin oriented boxes; furniture as their footprint OBB.
 import { state } from './state.js';
 import { PX_PER_FT_FALLBACK, wallLengthPx, wallAngle, obbOverlapMTV } from './geom.js';
-import { getItem } from './furniture.js';
+import { getItem, applyResize } from './furniture.js';
 
 const WALL_THICK_FT = 0.5;
 const CLIP_EPS = 0.5; // px overlap below which we treat as "just touching"
@@ -36,6 +36,46 @@ export function resolveAgainstWalls(f) {
       if (m && m.depth > 0.01) { f.x += m.x; f.y += m.y; moved = true; }
     }
     if (!moved) break;
+  }
+}
+
+// The deepest wall the piece still overlaps (MTV), or null.
+function deepestWallOverlap(f) {
+  const A = furnitureOBB(f);
+  let best = null;
+  for (const W of wallOBBs()) {
+    const m = obbOverlapMTV(A, W);
+    if (m && m.depth > CLIP_EPS && (!best || m.depth > best.depth)) best = m;
+  }
+  return best;
+}
+
+// Place a piece into a gap: push it out of walls, and if it's still wedged
+// between two walls (can't push out), shrink the constrained dimension until it
+// fits, then re-center. Resizable items only ('fixed'/'snap' just get pushed).
+export function fitBetweenWalls(f) {
+  const item = getItem(f.type);
+  if (!item) return;
+  resolveAgainstWalls(f);
+  if (item.resize === 'fixed' || item.resize === 'snap') return;
+  const clearanceFt = 0.05;
+  for (let i = 0; i < 30; i++) {
+    const m = deepestWallOverlap(f);
+    if (!m) return; // fits now
+    // Which of the item's local axes is being squeezed?
+    const a = (f.rot || 0) * Math.PI / 180;
+    const cos = Math.cos(a), sin = Math.sin(a);
+    const nx = m.x / m.depth, ny = m.y / m.depth;
+    const alongW = Math.abs(nx * cos + ny * sin);
+    const alongD = Math.abs(nx * -sin + ny * cos);
+    const axis = alongW >= alongD ? 'w' : 'd';
+    const shrinkFt = (2 * m.depth) / pxPerFt() + clearanceFt;
+    const cur = axis === 'w' ? f.w : f.d;
+    const next = applyResize(item, axis, cur - shrinkFt, { w: f.w, d: f.d });
+    // hit the minimum size and still doesn't fit → give up (will be flagged)
+    if ((axis === 'w' ? next.w : next.d) >= cur - 1e-4) return;
+    f.w = next.w; f.d = next.d;
+    resolveAgainstWalls(f); // re-center in the gap at the new size
   }
 }
 

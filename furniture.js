@@ -13,9 +13,9 @@ const IN = (inches) => inches / 12; // inches -> feet
 
 export const CATALOG = [
   // --- Kitchen appliances ---
-  { id: 'fridge',     label: 'Refrigerator', cat: 'Kitchen', kind: 'appliance', w: IN(36), d: IN(30), h: IN(66), color: '#cdd2d8', resize: 'fixed' },
-  { id: 'range',      label: 'Stove / Range', cat: 'Kitchen', kind: 'stove',    w: IN(30), d: IN(26), h: IN(36), color: '#c4c8ce', resize: 'fixed' },
-  { id: 'dishwasher', label: 'Dishwasher',   cat: 'Kitchen', kind: 'appliance', w: IN(24), d: IN(24), h: IN(34), color: '#cdd2d8', resize: 'fixed' },
+  { id: 'fridge',     label: 'Refrigerator', cat: 'Kitchen', kind: 'appliance', w: IN(36), d: IN(30), h: IN(66), color: '#cdd2d8', resize: 'stretch', minW: IN(24), maxW: IN(48), minD: IN(24), maxD: IN(36) },
+  { id: 'range',      label: 'Stove / Range', cat: 'Kitchen', kind: 'stove',    w: IN(30), d: IN(26), h: IN(36), color: '#c4c8ce', resize: 'stretch', minW: IN(20), maxW: IN(48), minD: IN(22), maxD: IN(30) },
+  { id: 'dishwasher', label: 'Dishwasher',   cat: 'Kitchen', kind: 'appliance', w: IN(24), d: IN(24), h: IN(34), color: '#cdd2d8', resize: 'stretch', minW: IN(18), maxW: IN(36), minD: IN(22), maxD: IN(30) },
   { id: 'counter',    label: 'Counter',      cat: 'Kitchen', kind: 'counter',  w: IN(36), d: IN(25), h: IN(36), color: '#b9a896', resize: 'units', unitW: IN(30), minU: 1, maxU: 6 },
   { id: 'kitsink',    label: 'Kitchen sink', cat: 'Kitchen',  kind: 'counter',  w: IN(33), d: IN(25), h: IN(36), color: '#b9a896', sink: true, resize: 'units', unitW: IN(28), minU: 1, maxU: 3 },
 
@@ -26,12 +26,7 @@ export const CATALOG = [
   { id: 'shower',  label: 'Shower stall', cat: 'Bathroom', kind: 'box',    w: IN(36), d: IN(36), h: IN(78), color: '#dfe6ec', light: true, resize: 'stretch', minW: IN(30), maxW: IN(60), minD: IN(30), maxD: IN(60) },
 
   // --- Bedroom ---
-  { id: 'bed',  label: 'Bed', cat: 'Bedroom', kind: 'bed', w: IN(60), d: IN(80), h: IN(24), color: '#9aa6b2', resize: 'snap', sizes: [
-    { w: IN(38), d: IN(75), name: 'Twin' },
-    { w: IN(54), d: IN(75), name: 'Full' },
-    { w: IN(60), d: IN(80), name: 'Queen' },
-    { w: IN(76), d: IN(80), name: 'King' },
-  ] },
+  { id: 'bed',  label: 'Bed', cat: 'Bedroom', kind: 'bed', w: IN(60), d: IN(80), h: IN(24), color: '#9aa6b2', resize: 'stretch', minW: IN(36), maxW: IN(84), minD: IN(70), maxD: IN(88) },
   { id: 'nightstand', label: 'Nightstand', cat: 'Bedroom', kind: 'table', w: IN(18), d: IN(18), h: IN(24), color: '#a07a52', resize: 'stretch', minW: IN(14), maxW: IN(30), minD: IN(14), maxD: IN(24) },
   { id: 'dresser',   label: 'Dresser',   cat: 'Bedroom', kind: 'box',   w: IN(60), d: IN(18), h: IN(32), color: '#a07a52', resize: 'stretch', minW: IN(30), maxW: IN(84), minD: IN(16), maxD: IN(24) },
   { id: 'wardrobe',  label: 'Wardrobe',  cat: 'Bedroom', kind: 'box',   w: IN(48), d: IN(24), h: IN(72), color: '#946f49', resize: 'stretch', minW: IN(30), maxW: IN(84), minD: IN(20), maxD: IN(30) },
@@ -49,6 +44,23 @@ export const CATALOG = [
 
 export function getItem(id) {
   return CATALOG.find((i) => i.id === id) || null;
+}
+
+// Nearest standard mattress size for a given width (feet) — beds resize
+// smoothly but we label which size they're closest to.
+const BED_SIZES = [
+  { w: IN(38), name: 'Twin' },
+  { w: IN(54), name: 'Full' },
+  { w: IN(60), name: 'Queen' },
+  { w: IN(76), name: 'King' },
+];
+export function bedSizeName(widthFt) {
+  let best = BED_SIZES[0], bd = Infinity;
+  for (const s of BED_SIZES) {
+    const dd = Math.abs(s.w - widthFt);
+    if (dd < bd) { bd = dd; best = s; }
+  }
+  return best.name;
 }
 
 export const CATEGORIES = ['Kitchen', 'Bathroom', 'Bedroom', 'Living'];

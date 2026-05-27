@@ -44,9 +44,55 @@ body {
   z-index: 15;
 }
 
+.brand-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 .brand {
   font-weight: 600;
   letter-spacing: .2px;
+}
+
+.help-menu {
+  left: 0;
+  right: auto;
+  width: 330px;
+  max-width: 86vw;
+  max-height: 74vh;
+  overflow-y: auto;
+  padding: 0;
+  gap: 0;
+}
+.help-section {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+}
+.help-section:first-child { border-top: none; }
+.help-section h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.help-section h4 .step { color: var(--muted); font-weight: 600; margin-right: 2px; }
+.help-section p { margin: 0 0 6px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.help-section p:last-child { margin-bottom: 0; }
+.help-section ul { margin: 4px 0 0; padding-left: 16px; }
+.help-section li { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 5px; }
+.help-section li:last-child { margin-bottom: 0; }
+.help-section b { color: var(--text); font-weight: 600; }
+.help-menu kbd {
+  display: inline-block;
+  font-family: inherit;
+  font-size: 10.5px;
+  line-height: 1;
+  padding: 2px 5px;
+  margin: 0 1px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
 }
 
 .view-toggle {
@@ -178,6 +224,19 @@ button.danger { color: var(--danger); }
   font-size: 18px;
   line-height: 1;
 }
+.tool .key {
+  margin-top: 2px;
+  font-size: 9px;
+  line-height: 1;
+  padding: 1px 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+}
+.tool.active .key {
+  color: #fff;
+  border-color: rgba(255,255,255,.5);
+}
 .tool:hover { background: var(--panel-2); color: var(--text); }
 .tool.active {
   background: var(--accent);
@@ -247,17 +306,20 @@ button.danger { color: var(--danger); }
 
 .item-panel {
   position: absolute;
-  bottom: 54px;
+  bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 8;
+  max-width: 92vw;
   background: rgba(22,23,26,.95);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 10px 14px;
   display: flex;
   align-items: center;
-  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
   box-shadow: var(--shadow);
   backdrop-filter: blur(3px);
 }

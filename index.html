@@ -16,7 +16,56 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">RoomWalk</div>
+    <div class="brand-group">
+      <span class="brand">RoomWalk</span>
+      <div class="dropdown">
+        <button id="help-btn" class="ghost">How to use ▾</button>
+        <div class="dropdown-menu help-menu" id="help-menu" hidden>
+          <div class="help-section">
+            <h4><span class="step">1 ·</span> Upload your plan</h4>
+            <p>Click <b>Upload floor plan</b> (top right) and pick an image of your floor plan. It appears as a clean blueprint outline you can trace over.</p>
+          </div>
+          <div class="help-section">
+            <h4><span class="step">2 ·</span> Set the scale</h4>
+            <p>Calibrate once so everything is life-size — open <b>Advanced ▾</b> and use any of:</p>
+            <ul>
+              <li><b>Set scale from a dimension</b> — click the two ends of a measurement printed on the plan (e.g. 24'-6"), then type it. Tip: use the longest dimension for best accuracy.</li>
+              <li>Or click a <b>wall you've drawn</b> and enter its real length.</li>
+              <li>Or <b>Calibrate by area</b> using the listing's square footage.</li>
+            </ul>
+            <p>Switch feet/inches ↔ meters under <b>Advanced → Units</b>. The box (top-right) shows your footprint and floor area to double-check.</p>
+          </div>
+          <div class="help-section">
+            <h4><span class="step">3 ·</span> Trace the walls</h4>
+            <p>Pick the <b>Wall</b> tool and click two points per wall. Ends snap together and to straight horizontal/vertical lines. These walls become your 3D room.</p>
+          </div>
+          <div class="help-section">
+            <h4><span class="step">4 ·</span> Doors &amp; windows</h4>
+            <p>Choose <b>Door</b> or <b>Window</b> and click on a wall to place it. With the <b>Pan</b> cursor, click one to select — drag the middle to move it, drag an end to resize, <kbd>Delete</kbd> to remove.</p>
+          </div>
+          <div class="help-section">
+            <h4><span class="step">5 ·</span> Furniture &amp; fixtures</h4>
+            <p>Click <b>Items</b>, choose a piece, then click on the plan to drop it. It auto-fits tight gaps and is selected right away.</p>
+            <ul>
+              <li>Drag to move; drag the red handles or use the panel to resize.</li>
+              <li><kbd>R</kbd> rotates · <kbd>Delete</kbd> removes.</li>
+              <li>A red ⚠ means it overlaps a wall or another item — nudge it clear.</li>
+            </ul>
+          </div>
+          <div class="help-section">
+            <h4><span class="step">6 ·</span> View in 3D &amp; Walk</h4>
+            <ul>
+              <li><b>3D</b> — drag to orbit, scroll to zoom. You can place &amp; move items here too.</li>
+              <li><b>Walk</b> — click-drag to look, <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows to move, <kbd>Q</kbd>/<kbd>E</kbd> to turn. You're 5'9" tall and walls/furniture are solid.</li>
+            </ul>
+          </div>
+          <div class="help-section">
+            <h4><span class="step">7 ·</span> Save your work</h4>
+            <p><b>Save</b> downloads your whole project (plan + walls + everything) as one file. <b>Open</b> loads it back later to continue where you left off.</p>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="view-toggle" role="tablist" aria-label="View">
       <button data-view="2d" class="active">2D</button>
       <button data-view="3d">3D</button>
@@ -69,23 +118,20 @@
   </header>
 
   <aside class="toolbar" id="toolbar">
-    <button class="tool active" data-tool="pan" title="Pan / select">
-      <span class="ico">✥</span><span>Pan</span>
+    <button class="tool active" data-tool="pan" title="Pan, select, move &amp; resize (V)">
+      <span class="ico">✥</span><span>Pan</span><span class="key">V</span>
     </button>
-    <button class="tool" data-tool="wall" title="Draw wall (click two points)">
-      <span class="ico">▱</span><span>Wall</span>
+    <button class="tool" data-tool="wall" title="Draw wall — click two points (W)">
+      <span class="ico">▱</span><span>Wall</span><span class="key">W</span>
     </button>
-    <button class="tool" data-tool="door" title="Place door on wall">
-      <span class="ico">⌐</span><span>Door</span>
+    <button class="tool" data-tool="door" title="Place door on wall (D)">
+      <span class="ico">⌐</span><span>Door</span><span class="key">D</span>
     </button>
-    <button class="tool" data-tool="window" title="Place window on wall">
-      <span class="ico">▭</span><span>Window</span>
+    <button class="tool" data-tool="window" title="Place window on wall (R)">
+      <span class="ico">▭</span><span>Window</span><span class="key">R</span>
     </button>
-    <button class="tool" data-tool="select" title="Select / resize / delete">
-      <span class="ico">◎</span><span>Select</span>
-    </button>
-    <button class="tool" data-tool="furniture" title="Place furniture & fixtures">
-      <span class="ico">🛋</span><span>Items</span>
+    <button class="tool" data-tool="furniture" title="Place furniture &amp; fixtures (I)">
+      <span class="ico">🛋</span><span>Items</span><span class="key">I</span>
     </button>
     <div class="divider"></div>
     <div class="scale-info" id="scale-info">No scale set</div>

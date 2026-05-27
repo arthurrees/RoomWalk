@@ -5,9 +5,10 @@ import { state, subscribe, emit, addFurniture } from './state.js';
 import {
   dist, wallLengthPx, wallsBoundingBox, PX_PER_FT_FALLBACK,
   DOOR_HEIGHT_FT, WINDOW_SILL_FT, WINDOW_HEIGHT_FT,
+  pointOnWall, projectPointToSegment, wallAngle,
 } from './geom.js';
-import { getItem, unitCount } from './furniture.js';
-import { resolveAgainstWalls, recomputeClips } from './collision.js';
+import { getItem, unitCount, applyResize } from './furniture.js';
+import { resolveAgainstWalls, fitBetweenWalls, recomputeClips } from './collision.js';
 
 const canvas = document.getElementById('canvas3d');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -123,6 +124,11 @@ export function rebuild() {
       const jamb = buildDoorJamb(w, o);
       if (jamb) sceneRoot.add(jamb);
     }
+    // Invisible pick proxies so doors/windows are clickable/selectable in 3D
+    for (const o of openings) {
+      const proxy = buildOpeningProxy(o);
+      if (proxy) sceneRoot.add(proxy);
+    }
   }
 
   // Furniture & fixtures
@@ -134,6 +140,9 @@ export function rebuild() {
       if (marker) sceneRoot.add(marker);
     }
   }
+
+  // Drag handles for the currently selected item
+  buildSelectionHandles();
 }
 
 const matClip = new THREE.LineBasicMaterial({ color: 0xff4d4d });
@@ -293,17 +302,21 @@ function buildFurniture(f) {
   return g;
 }
 
-// ---- 3D furniture placement & move ----
+// ---- 3D manipulation: placement, select, move, resize (furniture + openings) ----
 const _ray = new THREE.Raycaster();
 const _ndc = new THREE.Vector2();
 const _floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const _hitPt = new THREE.Vector3();
 const ghostMat = new THREE.MeshStandardMaterial({ color: 0xffd2d4, transparent: true, opacity: 0.45, depthWrite: false });
+const matHandle = new THREE.MeshBasicMaterial({ color: 0xff3b43, depthTest: false });
+const HANDLE_R = 0.5; // ft
 
 let ghost = null;          // { type, rot, group }
 let lastFloorPt = null;    // last world point under cursor on the floor
-let furnDrag = null;       // { id } while dragging an existing item (orbit view)
+let manip = null;          // active manipulation: { kind, id, axis|edge, offx, offy }
+let suppressLook = false;  // pause walk look while manipulating
 let downXY = null;         // screen pos at pointerdown (click-vs-drag detection)
+let handleMeshes = [];     // raycast targets for the selected item's handles
 
 function ndcFromEvent(e) {
   const r = renderer.domElement.getBoundingClientRect();
@@ -311,26 +324,124 @@ function ndcFromEvent(e) {
   return _ndc;
 }
 
-// World floor point under the cursor, or null.
 function floorPointFromEvent(e) {
   _ray.setFromCamera(ndcFromEvent(e), camera);
   const hit = _ray.ray.intersectPlane(_floorPlane, _hitPt);
   return hit ? { x: hit.x, z: hit.z } : null;
 }
 
-// Convert a world floor point (feet) back to image-pixel coords.
 function worldToImage(w) {
   return { x: w.x * effectiveScale() + _offset.x, y: w.z * effectiveScale() + _offset.y };
 }
 
-function pickFurnitureId(e) {
+// Raycast the selected item's handles; returns the handle's userData or null.
+function raycastHandle(e) {
+  if (!handleMeshes.length) return null;
+  _ray.setFromCamera(ndcFromEvent(e), camera);
+  const hits = _ray.intersectObjects(handleMeshes, false);
+  return hits.length ? hits[0].object.userData.handle : null;
+}
+
+// Raycast furniture/opening bodies; returns { kind, id } or null.
+function raycastBody(e) {
   _ray.setFromCamera(ndcFromEvent(e), camera);
   const hits = _ray.intersectObjects(sceneRoot.children, true);
   for (const h of hits) {
     let o = h.object;
-    while (o) { if (o.userData && o.userData.furnitureId != null) return o.userData.furnitureId; o = o.parent; }
+    while (o) {
+      if (o.userData?.furnitureId != null) return { kind: 'furniture', id: o.userData.furnitureId };
+      if (o.userData?.openingId != null) return { kind: 'opening', id: o.userData.openingId };
+      o = o.parent;
+    }
   }
   return null;
+}
+
+// ---- Selection handles & opening pick proxies (added to sceneRoot in rebuild) ----
+function addHandle(x, y, z, data) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(HANDLE_R, 16, 12), matHandle);
+  m.position.set(x, y, z);
+  m.renderOrder = 999;
+  m.userData.handle = data;
+  sceneRoot.add(m);
+  handleMeshes.push(m);
+}
+
+function buildSelectionHandles() {
+  handleMeshes = [];
+  const sel = state.selection;
+  if (!sel) return;
+  if (sel.kind === 'furniture') {
+    const f = state.furniture.find(x => x.id === sel.id);
+    const item = f && getItem(f.type);
+    if (!item) return;
+    if (item.resize !== 'stretch' && item.resize !== 'units') return; // fixed/snap: panel only
+    const w = f.w ?? item.w, d = f.d ?? item.d;
+    const cx = px2ft(f.x - _offset.x), cz = px2ft(f.y - _offset.y);
+    const r = (f.rot || 0) * Math.PI / 180;
+    const ux = Math.cos(r), uz = Math.sin(r);   // width axis (world XZ)
+    const vx = -Math.sin(r), vz = Math.cos(r);  // depth axis
+    const y = 0.5;
+    addHandle(cx + ux * w / 2, y, cz + uz * w / 2, { type: 'furn-resize', id: f.id, axis: 'w' });
+    addHandle(cx - ux * w / 2, y, cz - uz * w / 2, { type: 'furn-resize', id: f.id, axis: 'w' });
+    addHandle(cx + vx * d / 2, y, cz + vz * d / 2, { type: 'furn-resize', id: f.id, axis: 'd' });
+    addHandle(cx - vx * d / 2, y, cz - vz * d / 2, { type: 'furn-resize', id: f.id, axis: 'd' });
+  } else if (sel.kind === 'opening') {
+    const o = state.openings.find(x => x.id === sel.id);
+    const wall = o && state.walls.find(w => w.id === o.wallId);
+    if (!wall) return;
+    const lenFt = px2ft(wallLengthPx(wall));
+    const halfT = (o.width / lenFt) / 2;
+    const t1 = Math.max(0, o.t - halfT), t2 = Math.min(1, o.t + halfT);
+    const y = o.type === 'door' ? DOOR_HEIGHT_FT * 0.5 : WINDOW_SILL_FT + WINDOW_HEIGHT_FT / 2;
+    for (const [t, edge] of [[t1, 'left'], [t2, 'right']]) {
+      const p = pointOnWall(wall, t);
+      addHandle(px2ft(p.x - _offset.x), y, px2ft(p.y - _offset.y), { type: 'open-resize', id: o.id, edge });
+    }
+  }
+}
+
+function buildOpeningProxy(o) {
+  const wall = state.walls.find(w => w.id === o.wallId);
+  if (!wall) return null;
+  const sel = state.selection?.kind === 'opening' && state.selection.id === o.id;
+  const mat = new THREE.MeshBasicMaterial({ color: 0xff3b43, transparent: true, opacity: sel ? 0.16 : 0.0, depthWrite: false });
+  const ry = -wallAngle(wall);
+  const depth = WALL_THICKNESS_FT + 0.1;
+
+  if (o.type === 'window') {
+    // Windows are solid glass — the whole pane is selectable.
+    const c = pointOnWall(wall, o.t);
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(o.width, WINDOW_HEIGHT_FT, depth), mat);
+    mesh.position.set(px2ft(c.x - _offset.x), WINDOW_SILL_FT + WINDOW_HEIGHT_FT / 2, px2ft(c.y - _offset.y));
+    mesh.rotation.y = ry;
+    mesh.userData.openingId = o.id;
+    return mesh;
+  }
+
+  // Door: only the frame (jambs + header) is clickable, so the open doorway in
+  // the middle doesn't grab the door when you walk through it.
+  const lenFt = px2ft(wallLengthPx(wall));
+  const halfT = (o.width / lenFt) / 2;
+  const t1 = Math.max(0, o.t - halfT), t2 = Math.min(1, o.t + halfT);
+  const group = new THREE.Group();
+  group.userData.openingId = o.id;
+  for (const t of [t1, t2]) {
+    const p = pointOnWall(wall, t);
+    const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.4, DOOR_HEIGHT_FT, depth), mat);
+    jamb.position.set(px2ft(p.x - _offset.x), DOOR_HEIGHT_FT / 2, px2ft(p.y - _offset.y));
+    jamb.rotation.y = ry;
+    group.add(jamb);
+  }
+  const headerH = state.wallHeightFt - DOOR_HEIGHT_FT;
+  if (headerH > 0.4) {
+    const c = pointOnWall(wall, o.t);
+    const header = new THREE.Mesh(new THREE.BoxGeometry(o.width, headerH, depth), mat);
+    header.position.set(px2ft(c.x - _offset.x), DOOR_HEIGHT_FT + headerH / 2, px2ft(c.y - _offset.y));
+    header.rotation.y = ry;
+    group.add(header);
+  }
+  return group;
 }
 
 function updateGhost(type, rot, worldPt) {
@@ -357,33 +468,99 @@ function clearGhost() {
 
 function in3dOrWalk() { return state.view === '3d' || state.view === 'walk'; }
 
+function beginManip(m) {
+  manip = m;
+  orbit.enabled = false;
+  suppressLook = true;
+}
+function endManip() {
+  if (manip && (manip.kind === 'furn-move' || manip.kind === 'furn-resize')) {
+    const f = state.furniture.find(x => x.id === manip.id);
+    if (f) { resolveAgainstWalls(f); emit(); }
+  }
+  manip = null;
+  orbit.enabled = state.view === '3d'; // keep orbit OFF in walk
+  suppressLook = false;
+}
+
+function applyManip(wp) {
+  if (manip.kind === 'furn-move') {
+    const f = state.furniture.find(x => x.id === manip.id);
+    if (f) { const img = worldToImage(wp); f.x = img.x - manip.offx; f.y = img.y - manip.offy; emit(); }
+  } else if (manip.kind === 'furn-resize') {
+    const f = state.furniture.find(x => x.id === manip.id);
+    if (!f) return;
+    const item = getItem(f.type);
+    const cx = px2ft(f.x - _offset.x), cz = px2ft(f.y - _offset.y);
+    const r = (f.rot || 0) * Math.PI / 180;
+    const dx = wp.x - cx, dz = wp.z - cz;
+    const local = manip.axis === 'w'
+      ? dx * Math.cos(r) + dz * Math.sin(r)
+      : -dx * Math.sin(r) + dz * Math.cos(r);
+    const next = applyResize(item, manip.axis, 2 * Math.abs(local), { w: f.w, d: f.d });
+    f.w = next.w; f.d = next.d; emit();
+  } else if (manip.kind === 'open-move' || manip.kind === 'open-resize') {
+    const o = state.openings.find(x => x.id === manip.id);
+    const wall = o && state.walls.find(w => w.id === o.wallId);
+    if (!wall) return;
+    const img = worldToImage(wp);
+    const proj = projectPointToSegment(img.x, img.y, wall.x1, wall.y1, wall.x2, wall.y2);
+    const len = wallLengthPx(wall);
+    const pxPerFt = state.scale ?? PX_PER_FT_FALLBACK;
+    if (manip.kind === 'open-move') {
+      const half = ((o.width * pxPerFt) / len) / 2;
+      o.t = Math.max(half, Math.min(1 - half, proj.t));
+    } else {
+      const oldHalfT = ((o.width * pxPerFt) / len) / 2;
+      const fixedT = manip.edge === 'left' ? (o.t + oldHalfT) : (o.t - oldHalfT);
+      const movedT = Math.max(0, Math.min(1, proj.t));
+      const newWidthPx = Math.abs(movedT - fixedT) * len;
+      const newFt = Math.max(1, Math.min(12, newWidthPx / pxPerFt));
+      const newHalfT = ((newFt * pxPerFt) / len) / 2;
+      o.width = newFt;
+      o.t = manip.edge === 'left' ? fixedT - newHalfT : fixedT + newHalfT;
+      o.t = Math.max(newHalfT, Math.min(1 - newHalfT, o.t));
+    }
+    emit();
+  }
+}
+
 // Capture-phase pointerdown beats OrbitControls so we can intercept grabs.
 renderer.domElement.addEventListener('pointerdown', (e) => {
   if (e.button !== 0 || !in3dOrWalk()) return;
   downXY = { x: e.clientX, y: e.clientY };
   if (state.tool === 'furniture' && state.placingFurniture) return; // drop on click (pointerup)
-  // Drag an existing item to move it — orbit view only (walk uses drag to look).
-  if (state.view === '3d' && (state.tool === 'pan' || state.tool === 'select')) {
-    const id = pickFurnitureId(e);
-    if (id != null) {
-      state.selection = { kind: 'furniture', id };
-      emit();
-      furnDrag = { id };
-      orbit.enabled = false;
-      e.stopImmediatePropagation();
-      e.preventDefault();
+  if (state.tool !== 'pan' && state.tool !== 'select') return;
+
+  // 1. Grab a resize handle on the selected item.
+  const h = raycastHandle(e);
+  if (h) {
+    if (h.type === 'furn-resize') beginManip({ kind: 'furn-resize', id: h.id, axis: h.axis });
+    else if (h.type === 'open-resize') beginManip({ kind: 'open-resize', id: h.id, edge: h.edge });
+    e.stopImmediatePropagation(); e.preventDefault();
+    return;
+  }
+  // 2. Grab an item body → select + move.
+  const body = raycastBody(e);
+  if (body) {
+    state.selection = { kind: body.kind, id: body.id };
+    if (body.kind === 'furniture') {
+      const f = state.furniture.find(x => x.id === body.id);
+      const wp = floorPointFromEvent(e); const img = wp ? worldToImage(wp) : { x: f.x, y: f.y };
+      beginManip({ kind: 'furn-move', id: body.id, offx: img.x - f.x, offy: img.y - f.y });
+    } else {
+      beginManip({ kind: 'open-move', id: body.id });
     }
+    emit();
+    e.stopImmediatePropagation(); e.preventDefault();
   }
 }, true);
 
 document.addEventListener('pointermove', (e) => {
   if (!in3dOrWalk()) return;
-  if (furnDrag) {
+  if (manip) {
     const wp = floorPointFromEvent(e);
-    if (wp) {
-      const f = state.furniture.find(x => x.id === furnDrag.id);
-      if (f) { const img = worldToImage(wp); f.x = img.x; f.y = img.y; emit(); }
-    }
+    if (wp) applyManip(wp);
     return;
   }
   if (state.tool === 'furniture' && state.placingFurniture) {
@@ -393,12 +570,7 @@ document.addEventListener('pointermove', (e) => {
 });
 
 document.addEventListener('pointerup', (e) => {
-  if (furnDrag) {
-    const f = state.furniture.find(x => x.id === furnDrag.id);
-    if (f) { resolveAgainstWalls(f); emit(); }
-    furnDrag = null; orbit.enabled = true; downXY = null;
-    return;
-  }
+  if (manip) { endManip(); downXY = null; return; }
   if (!downXY || !in3dOrWalk()) { downXY = null; return; }
   const moved = Math.hypot(e.clientX - downXY.x, e.clientY - downXY.y);
   downXY = null;
@@ -408,13 +580,15 @@ document.addEventListener('pointerup', (e) => {
     if (wp) {
       const img = worldToImage(wp);
       const f = addFurniture(state.placingFurniture, img.x, img.y, state.placingRot);
-      resolveAgainstWalls(f);
+      fitBetweenWalls(f);
+      state.placingFurniture = null;
+      state.tool = 'pan';
+      state.selection = { kind: 'furniture', id: f.id };
       emit();
     }
   } else if (state.tool === 'pan' || state.tool === 'select') {
-    const id = pickFurnitureId(e);
-    if (id != null) { state.selection = { kind: 'furniture', id }; emit(); }
-    else if (state.selection?.kind === 'furniture') { state.selection = null; emit(); }
+    // click empty space → deselect (body clicks are handled on pointerdown)
+    if (!raycastBody(e) && state.selection) { state.selection = null; emit(); }
   }
 });
 
@@ -557,6 +731,7 @@ function clampDelta(v) {
 
 function onMouseDown(e) {
   if (state.view !== 'walk' || e.button !== 0) return;
+  if (manip) return; // grabbing a handle/item — don't start look-drag
   walk.dragging = true;
   renderer.domElement.style.cursor = 'grabbing';
   e.preventDefault();

@@ -84,12 +84,22 @@ re-render on `emit()`.
     cushions, counter→more bays); `stretch` scales; `snap` (beds) cycles
     twin/full/queen/king; `fixed` (appliances) don't resize. Each placed item has
     its own w/d.
-  - **Selection panel** (bottom center): W/D steppers, Rotate, Delete — works in
-    every view (the resize/delete path for 3D & walk where 2D handles aren't).
+  - **Selection panel** (bottom center): W/D steppers, Rotate, Delete.
+  - **Direct manipulation in 3D & Walk:** click furniture *or* a door/window to
+    select; floor/wall-level **drag handles** appear — drag an edge handle to
+    resize, drag the body to move (furniture) or slide along the wall (openings).
+    A capture-phase pointer pipeline intercepts grabs before OrbitControls; in
+    Walk, grabbing a handle/item pauses look-drag (`suppressLook`). Doors/windows
+    get invisible pick proxies (`userData.openingId`) so they're selectable in 3D.
+    All edits write shared state, so the 2D view stays in sync.
 - **Collision-aware placement.** On drop / resize / drag-release, items slide out
-  of walls into open space (corner bed grown to king expands into the room).
-  Items still overlapping a wall or another item are flagged with a red dashed
-  outline + ⚠ (2D) and a red wireframe box (3D).
+  of walls into open space (corner bed grown to king expands into the room). On
+  **placement**, an item wedged between two walls **auto-fits** — it shrinks the
+  squeezed dimension to fit the gap (resizable items only). Items that still
+  overlap a wall or another item are flagged with a red dashed outline + ⚠ (2D)
+  and a red wireframe box (3D). After dropping, the tool auto-switches to the
+  Pan cursor with the new item selected. (Pan is the single all-purpose cursor —
+  pan / select / move / resize; there is no separate Select tool.)
 - **Save / Open.** Save downloads a self-contained `.json` (walls, openings,
   furniture, scale, units, settings, AND the floor-plan image embedded as a data
   URL). Open restores everything and reseeds ids.
