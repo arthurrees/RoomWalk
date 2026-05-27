@@ -77,20 +77,34 @@ re-render on `emit()`.
 - **Furniture & fixtures.** Catalog of appliances (fridge, range, dishwasher,
   counter), bath fixtures (toilet, vanity, tub, shower), and furniture (beds,
   sofa, chairs, tables, desk, dresser, wardrobe, TV stand). Box-proxy 3D
-  (stylized; data model allows swapping to glTF later).
-  - **Placement:** Items tool → palette → click item to arm → click to drop.
-    Works in 2D, 3D, and Walk. R rotates, Delete removes.
-  - **Adaptive resize:** `units` items repeat parts (sink→double sink, sofa→more
-    cushions, counter→more bays); `stretch` scales; `snap` (beds) cycles
-    twin/full/queen/king; `fixed` (appliances) don't resize. Each placed item has
-    its own w/d.
-  - **Selection panel** (bottom center): W/D steppers, Rotate, Delete.
+  (stylized; data model allows swapping to glTF later). Fixtures have real
+  detail/recesses: vanity & kitchen sinks build a recessed basin (rim + sunk
+  well via the `addBasin` helper) + faucet; tub is a hollow shell (floor + 4
+  walls, open top) with drain + faucet; toilet has tank + pedestal + bowl + torus
+  seat ring + bowl divot; stove has 4 burners + oven handle; fridge/dishwasher
+  have a handle (+ door seam on tall units). Bed/sofa/chair/table left simpler.
+  - **Placement:** Items tool (shortcut `I`) → palette → click item to arm →
+    click to drop. Works in 2D, 3D, and Walk. After dropping, auto-switches to
+    Pan with the item selected. R rotates, Delete removes.
+  - **Resize behaviors:** `units` items repeat parts (sink→double sink/basins,
+    sofa→more cushions, counter→more bays — the dimension stays continuous, the
+    sub-count is a render threshold); `stretch` scales; `fixed` (toilet only) can't
+    resize. Beds, fridge, range, dishwasher are now `stretch` (smooth). Each placed
+    item has its own w/d. **No snapping** — drag handles are continuous and panel
+    +/- steps are 1 inch.
+  - **Selection panel** (bottom center): W/D steppers (1-inch), Rotate, Delete.
+    For a **bed** the title shows the nearest standard size (Twin/Full/Queen/King)
+    as you smoothly resize. For openings it shows just Delete + width. Hint pills /
+    walk instructions hide whenever something is selected (declutter).
   - **Direct manipulation in 3D & Walk:** click furniture *or* a door/window to
     select; floor/wall-level **drag handles** appear — drag an edge handle to
     resize, drag the body to move (furniture) or slide along the wall (openings).
     A capture-phase pointer pipeline intercepts grabs before OrbitControls; in
-    Walk, grabbing a handle/item pauses look-drag (`suppressLook`). Doors/windows
-    get invisible pick proxies (`userData.openingId`) so they're selectable in 3D.
+    Walk, grabbing a handle/item pauses look-drag (`suppressLook`), and `endManip`
+    only re-enables orbit when `view==='3d'` (so editing in Walk doesn't leave
+    orbit on and fling the camera). Doors/windows get invisible pick proxies
+    (`userData.openingId`); for **doors** the proxy is only the frame (jambs +
+    header), so the open doorway doesn't grab the door when walking through.
     All edits write shared state, so the 2D view stays in sync.
 - **Collision-aware placement.** On drop / resize / drag-release, items slide out
   of walls into open space (corner bed grown to king expands into the room). On
@@ -124,12 +138,21 @@ live in the `PAL` object at the top of `view2d.js`; UI colors in CSS `:root`.
 ## Roadmap
 
 1. Adaptive resize — **done**
-2. Light "feel" pass (materials, lighting, optional ceiling/baseboards) — next
-3. More item detail
-4. OCR auto-reading of printed dimension labels
+2. Direct 3D/Walk manipulation (drag handles, openings editable in 3D) — **done**
+3. More item detail — **fixtures done** (sinks/tub/toilet/stove/fridge); still
+   plain: dresser, wardrobe, TV stand, shower stall
+4. Light "feel" pass (materials, lighting, optional ceiling/baseboards) — next
+5. OCR auto-reading of printed dimension labels
 
 Deferred: importing external glTF/OBJ model files (chose catalog box-proxies for
-now). Possible: autosave to localStorage; moving items in walk via arrow nudge.
+now). Possible: autosave to localStorage; moving items in walk via arrow nudge;
+optional bed snap-to-standard toggle.
+
+## Deploy status
+
+Live on Cloudflare Pages (`roomwalk.pages.dev`), repo `github.com/arthurrees/RoomWalk`.
+three.js vendored locally; `_headers` sets no-cache; `wrangler.jsonc` serves root.
+Push to `main` → auto-deploy. Cloudflare Web Analytics available on the project.
 
 ## Example floor plans
 

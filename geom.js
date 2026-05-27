@@ -46,6 +46,56 @@ export function snapToEndpoint(walls, px, py, snapDist) {
   return best;
 }
 
+// Detect a "gap" the cursor is hovering between two nearly-collinear wall
+// endpoints — the un-traced doorway/window opening a user left open. The two
+// endpoints become a short bridge wall that the opening then fills.
+// Returns { p1, p2, mid, lenPx } or null. All distances in image pixels;
+// callers pass screen tolerances pre-divided by zoom and spans in px (ft*scale).
+export function findGap(walls, px, py, opts = {}) {
+  const {
+    maxGapPx = Infinity, // longest bridgeable gap (a doorway is "relatively short")
+    minGapPx = 0,        // ignore endpoints already joined at a corner
+    hitPx = 24,          // how close the cursor must be to the bridge line
+    angleTolDeg = 18,    // max deviation from collinear for BOTH walls
+  } = opts;
+
+  const ends = [];
+  for (const w of walls) {
+    const dx = w.x2 - w.x1, dy = w.y2 - w.y1;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len; // wall's own unit direction
+    ends.push({ x: w.x1, y: w.y1, ux, uy, wall: w });
+    ends.push({ x: w.x2, y: w.y2, ux, uy, wall: w });
+  }
+
+  const cosTol = Math.cos(angleTolDeg * Math.PI / 180);
+  let best = null;
+  for (let i = 0; i < ends.length; i++) {
+    for (let j = i + 1; j < ends.length; j++) {
+      const a = ends[i], b = ends[j];
+      if (a.wall === b.wall) continue;
+      const gap = dist(a.x, a.y, b.x, b.y);
+      if (gap <= minGapPx || gap > maxGapPx) continue;
+      // Bridge must continue both wall lines (reject perpendicular corners).
+      const bx = (b.x - a.x) / gap, by = (b.y - a.y) / gap;
+      if (Math.abs(a.ux * bx + a.uy * by) < cosTol) continue;
+      if (Math.abs(b.ux * bx + b.uy * by) < cosTol) continue;
+      // Cursor must sit on the bridge, between (not past) the endpoints.
+      const proj = projectPointToSegment(px, py, a.x, a.y, b.x, b.y);
+      if (proj.dist > hitPx || proj.t <= 0.001 || proj.t >= 0.999) continue;
+      const score = proj.dist + gap * 0.05; // closest first, then smallest gap
+      if (!best || score < best.score) {
+        best = { p1: { x: a.x, y: a.y }, p2: { x: b.x, y: b.y }, lenPx: gap, score };
+      }
+    }
+  }
+  if (best) {
+    best.mid = { x: (best.p1.x + best.p2.x) / 2, y: (best.p1.y + best.p2.y) / 2 };
+    delete best.score;
+  }
+  return best;
+}
+
 // Snap to axis (horizontal/vertical) relative to anchor (ax,ay) if within tolerance angle.
 export function snapToAxis(ax, ay, px, py, tolDeg = 6) {
   const dx = px - ax, dy = py - ay;

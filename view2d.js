@@ -1,7 +1,7 @@
 // 2D canvas: floor plan image + wall/door/window editor.
 import { state, emit, addWall, addOpening, addFurniture, deleteSelection, subscribe } from './state.js';
 import {
-  dist, projectPointToSegment, nearestWall, snapToEndpoint, snapToAxis,
+  dist, projectPointToSegment, nearestWall, snapToEndpoint, snapToAxis, findGap,
   pointOnWall, wallAngle, wallLengthPx, PX_PER_FT_FALLBACK,
   DEFAULT_DOOR_WIDTH_FT, DEFAULT_WINDOW_WIDTH_FT, formatLength,
 } from './geom.js';
@@ -405,16 +405,33 @@ function roundRect(c, x, y, w, h, r) {
   c.closePath();
 }
 
+// Shared gap-detection tolerances for door/window placement. Spans are in image
+// px (ft*scale); the cursor hit radius is in screen px, so divide by zoom.
+function gapOpts() {
+  return {
+    maxGapPx: 10 * pxPerFt(), // doorways/openings are "relatively short"
+    minGapPx: 0.5 * pxPerFt(), // ignore endpoints already joined at a corner
+    hitPx: 24 / state.zoom,
+  };
+}
+
 function drawOpeningPreview(hover) {
-  const { wall, t } = hover;
-  const widthFt = state.tool === 'door' ? DEFAULT_DOOR_WIDTH_FT : DEFAULT_WINDOW_WIDTH_FT;
-  const widthPx = widthFt * pxPerFt();
-  const len = wallLengthPx(wall);
-  const tWidth = widthPx / len;
-  const t1 = Math.max(0, t - tWidth / 2);
-  const t2 = Math.min(1, t + tWidth / 2);
-  const p1 = pointOnWall(wall, t1);
-  const p2 = pointOnWall(wall, t2);
+  let p1, p2;
+  if (hover.gap) {
+    // Bridging an un-traced gap: span the full distance between the two ends.
+    p1 = hover.gap.p1;
+    p2 = hover.gap.p2;
+  } else {
+    const { wall, t } = hover;
+    const widthFt = state.tool === 'door' ? DEFAULT_DOOR_WIDTH_FT : DEFAULT_WINDOW_WIDTH_FT;
+    const widthPx = widthFt * pxPerFt();
+    const len = wallLengthPx(wall);
+    const tWidth = widthPx / len;
+    const t1 = Math.max(0, t - tWidth / 2);
+    const t2 = Math.min(1, t + tWidth / 2);
+    p1 = pointOnWall(wall, t1);
+    p2 = pointOnWall(wall, t2);
+  }
   ctx.save();
   ctx.lineWidth = 6 / state.zoom;
   ctx.globalAlpha = 0.55;
@@ -423,6 +440,16 @@ function drawOpeningPreview(hover) {
   ctx.moveTo(p1.x, p1.y);
   ctx.lineTo(p2.x, p2.y);
   ctx.stroke();
+  // For a gap, dot the two endpoints so it reads as "I'm bridging these ends".
+  if (hover.gap) {
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = ctx.strokeStyle;
+    for (const pt of [p1, p2]) {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 5 / state.zoom, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
   ctx.restore();
 }
 
@@ -778,6 +805,14 @@ canvas.addEventListener('mousedown', (e) => {
     if (near) {
       const widthFt = state.tool === 'door' ? DEFAULT_DOOR_WIDTH_FT : DEFAULT_WINDOW_WIDTH_FT;
       addOpening(state.tool, near.wall.id, near.t, widthFt);
+    } else {
+      // No wall here — try to bridge a gap between two collinear wall ends and
+      // fill it with the opening, centered and sized to the gap.
+      const gap = findGap(state.walls, p.x, p.y, gapOpts());
+      if (gap) {
+        const bridge = addWall(gap.p1.x, gap.p1.y, gap.p2.x, gap.p2.y);
+        addOpening(state.tool, bridge.id, 0.5, gap.lenPx / pxPerFt());
+      }
     }
   }
 });
@@ -932,7 +967,12 @@ canvas.addEventListener('mousemove', (e) => {
   // hover preview for door/window
   if (state.tool === 'door' || state.tool === 'window') {
     const near = nearestWall(state.walls, p.x, p.y, 30 / state.zoom);
-    state.hover = near || null;
+    if (near) {
+      state.hover = near;
+    } else {
+      const gap = findGap(state.walls, p.x, p.y, gapOpts());
+      state.hover = gap ? { gap } : null;
+    }
     draw();
     return;
   }
