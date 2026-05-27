@@ -419,10 +419,10 @@ function buildSelectionHandles() {
     const ux = Math.cos(r), uz = Math.sin(r);   // width axis (world XZ)
     const vx = -Math.sin(r), vz = Math.cos(r);  // depth axis
     const y = 0.5;
-    addHandle(cx + ux * w / 2, y, cz + uz * w / 2, { type: 'furn-resize', id: f.id, axis: 'w' });
-    addHandle(cx - ux * w / 2, y, cz - uz * w / 2, { type: 'furn-resize', id: f.id, axis: 'w' });
-    addHandle(cx + vx * d / 2, y, cz + vz * d / 2, { type: 'furn-resize', id: f.id, axis: 'd' });
-    addHandle(cx - vx * d / 2, y, cz - vz * d / 2, { type: 'furn-resize', id: f.id, axis: 'd' });
+    addHandle(cx + ux * w / 2, y, cz + uz * w / 2, { type: 'furn-resize', id: f.id, axis: 'w', sgn: 1 });
+    addHandle(cx - ux * w / 2, y, cz - uz * w / 2, { type: 'furn-resize', id: f.id, axis: 'w', sgn: -1 });
+    addHandle(cx + vx * d / 2, y, cz + vz * d / 2, { type: 'furn-resize', id: f.id, axis: 'd', sgn: 1 });
+    addHandle(cx - vx * d / 2, y, cz - vz * d / 2, { type: 'furn-resize', id: f.id, axis: 'd', sgn: -1 });
   } else if (sel.kind === 'opening') {
     const o = state.openings.find(x => x.id === sel.id);
     const wall = o && state.walls.find(w => w.id === o.wallId);
@@ -523,19 +523,23 @@ function endManip() {
 function applyManip(wp) {
   if (manip.kind === 'furn-move') {
     const f = state.furniture.find(x => x.id === manip.id);
-    if (f) { const img = worldToImage(wp); f.x = img.x - manip.offx; f.y = img.y - manip.offy; emit(); }
+    if (f) { const img = worldToImage(wp); f.x = img.x - manip.offx; f.y = img.y - manip.offy; resolveAgainstWalls(f); emit(); }
   } else if (manip.kind === 'furn-resize') {
     const f = state.furniture.find(x => x.id === manip.id);
     if (!f) return;
     const item = getItem(f.type);
-    const cx = px2ft(f.x - _offset.x), cz = px2ft(f.y - _offset.y);
-    const r = (f.rot || 0) * Math.PI / 180;
-    const dx = wp.x - cx, dz = wp.z - cz;
-    const local = manip.axis === 'w'
-      ? dx * Math.cos(r) + dz * Math.sin(r)
-      : -dx * Math.sin(r) + dz * Math.cos(r);
-    const next = applyResize(item, manip.axis, 2 * Math.abs(local), { w: f.w, d: f.d });
-    f.w = next.w; f.d = next.d; emit();
+    const { axis, sgn, ux, uy, anchor } = manip;
+    const img = worldToImage(wp); // cursor in image px (anchor lives in image px)
+    // Extent = distance from the fixed (opposite) edge to the cursor, along axis.
+    const extentPx = ((img.x - anchor.x) * ux + (img.y - anchor.y) * uy) * sgn;
+    const valueFt = Math.max(0, extentPx) / effectiveScale();
+    const next = applyResize(item, axis, valueFt, { w: f.w, d: f.d });
+    f.w = next.w; f.d = next.d;
+    // Recenter so the anchored edge stays put (only the dragged side moved).
+    const halfPx = ((axis === 'w' ? next.w : next.d) * effectiveScale()) / 2;
+    f.x = anchor.x + sgn * halfPx * ux;
+    f.y = anchor.y + sgn * halfPx * uy;
+    emit();
   } else if (manip.kind === 'open-move' || manip.kind === 'open-resize') {
     const o = state.openings.find(x => x.id === manip.id);
     const wall = o && state.walls.find(w => w.id === o.wallId);
@@ -572,7 +576,16 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   // 1. Grab a resize handle on the selected item.
   const h = raycastHandle(e);
   if (h) {
-    if (h.type === 'furn-resize') beginManip({ kind: 'furn-resize', id: h.id, axis: h.axis });
+    if (h.type === 'furn-resize') {
+      const f = state.furniture.find(x => x.id === h.id);
+      const item = f && getItem(f.type);
+      const a = (f.rot || 0) * Math.PI / 180;
+      const ux = h.axis === 'w' ? Math.cos(a) : -Math.sin(a);
+      const uy = h.axis === 'w' ? Math.sin(a) : Math.cos(a);
+      const halfPx = ((h.axis === 'w' ? (f.w ?? item.w) : (f.d ?? item.d)) * effectiveScale()) / 2;
+      const anchor = { x: f.x - h.sgn * halfPx * ux, y: f.y - h.sgn * halfPx * uy };
+      beginManip({ kind: 'furn-resize', id: h.id, axis: h.axis, sgn: h.sgn, ux, uy, anchor });
+    }
     else if (h.type === 'open-resize') beginManip({ kind: 'open-resize', id: h.id, edge: h.edge });
     e.stopImmediatePropagation(); e.preventDefault();
     return;

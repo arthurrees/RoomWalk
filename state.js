@@ -87,8 +87,8 @@ export function setScale(pxPerFt) {
   emit();
 }
 
-export function addWall(x1, y1, x2, y2) {
-  const w = { id: id(), x1, y1, x2, y2 };
+export function addWall(x1, y1, x2, y2, extra) {
+  const w = { id: id(), x1, y1, x2, y2, ...extra };
   state.walls.push(w);
   emit();
   return w;
@@ -101,6 +101,29 @@ export function addOpening(type, wallId, t, widthFt) {
   return o;
 }
 
+// Place auto-detected doors/windows. Two item kinds:
+//   { kind:'bridge', x1,y1,x2,y2, type, widthFt } — door: fills a gap with a
+//     short bridge wall (tagged auto) plus an opening spanning it.
+//   { kind:'onwall', wallId, t, type, widthFt }   — window: opening on an
+//     existing wall (windows don't gap; they thin the wall).
+// Idempotent: a prior run's auto bridges and auto openings are removed first,
+// so re-running replaces rather than stacks.
+export function setDetectedOpenings(items) {
+  state.walls = state.walls.filter(w => !w.auto);
+  state.openings = state.openings.filter(o => !o.auto);
+  for (const it of items) {
+    if (it.kind === 'bridge') {
+      const w = { id: id(), x1: it.x1, y1: it.y1, x2: it.x2, y2: it.y2, auto: true, bridge: true };
+      state.walls.push(w);
+      state.openings.push({ id: id(), type: it.type, wallId: w.id, t: 0.5, width: it.widthFt, auto: true });
+    } else {
+      state.openings.push({ id: id(), type: it.type, wallId: it.wallId, t: it.t, width: it.widthFt, auto: true });
+    }
+  }
+  state.selection = null;
+  emit();
+}
+
 export function deleteSelection() {
   if (!state.selection) return;
   const { kind, id: sid } = state.selection;
@@ -110,7 +133,17 @@ export function deleteSelection() {
   } else if (kind === 'furniture') {
     state.furniture = state.furniture.filter(f => f.id !== sid);
   } else {
+    const op = state.openings.find(o => o.id === sid);
     state.openings = state.openings.filter(o => o.id !== sid);
+    // If it sat on a "bridge" wall (one created only to host an opening across a
+    // gap), remove that wall too once empty — so the gap reopens rather than
+    // leaving a solid wall behind.
+    if (op) {
+      const wall = state.walls.find(w => w.id === op.wallId);
+      if (wall && wall.bridge && !state.openings.some(o => o.wallId === wall.id)) {
+        state.walls = state.walls.filter(w => w.id !== wall.id);
+      }
+    }
   }
   state.selection = null;
   emit();

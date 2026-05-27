@@ -520,13 +520,14 @@ function furnHandles(f, item) {
   const { wPx, dPx } = footprintPx(w, d);
   const a = f.rot * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a);
   const local = [
-    { edge: 'w', lx: wPx / 2, ly: 0 },
-    { edge: 'w', lx: -wPx / 2, ly: 0 },
-    { edge: 'd', lx: 0, ly: dPx / 2 },
-    { edge: 'd', lx: 0, ly: -dPx / 2 },
+    { edge: 'w', lx: wPx / 2, ly: 0, sgn: 1 },
+    { edge: 'w', lx: -wPx / 2, ly: 0, sgn: -1 },
+    { edge: 'd', lx: 0, ly: dPx / 2, sgn: 1 },
+    { edge: 'd', lx: 0, ly: -dPx / 2, sgn: -1 },
   ];
   return local.map(h => ({
     edge: h.edge,
+    sgn: h.sgn,
     x: f.x + h.lx * cos - h.ly * sin,
     y: f.y + h.lx * sin + h.ly * cos,
   }));
@@ -624,9 +625,20 @@ function hitTestFurnitureHandle(px, py) {
   if (!item || item.resize === 'fixed') return null;
   const r = (HANDLE_PX + HANDLE_HIT_PAD) / state.zoom;
   for (const h of furnHandles(f, item)) {
-    if (dist(px, py, h.x, h.y) <= r) return { edge: h.edge };
+    if (dist(px, py, h.x, h.y) <= r) return { edge: h.edge, sgn: h.sgn };
   }
   return null;
+}
+
+// Anchor the edge OPPOSITE the grabbed handle so resizing moves only the dragged
+// side. Returns { edge, sgn, ux, uy, anchor } — anchor is the fixed (opposite)
+// edge midpoint in image px; (ux,uy) is the unit vector along the resized axis.
+function resizeAnchor(f, item, edge, sgn) {
+  const a = f.rot * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a);
+  const ux = edge === 'w' ? cos : -sin;
+  const uy = edge === 'w' ? sin : cos;
+  const halfPx = ((edge === 'w' ? (f.w ?? item.w) : (f.d ?? item.d)) * pxPerFt()) / 2;
+  return { edge, sgn, ux, uy, anchor: { x: f.x - sgn * halfPx * ux, y: f.y - sgn * halfPx * uy } };
 }
 
 // --- Scale calibration snapping ---
@@ -752,7 +764,9 @@ canvas.addEventListener('mousedown', (e) => {
     // 0. Resize handle of the already-selected furniture.
     const fh = hitTestFurnitureHandle(p.x, p.y);
     if (fh) {
-      dragging = { kind: 'furniture-resize', id: state.selection.id, edge: fh.edge };
+      const f = state.furniture.find(x => x.id === state.selection.id);
+      const item = f && getItem(f.type);
+      dragging = { kind: 'furniture-resize', id: state.selection.id, ...resizeAnchor(f, item, fh.edge, fh.sgn) };
       return;
     }
     // 1. Click on an opening → select; the end-thirds resize, the middle moves.
@@ -801,17 +815,18 @@ canvas.addEventListener('mousedown', (e) => {
       emit();
     }
   } else if (state.tool === 'door' || state.tool === 'window') {
-    const near = nearestWall(state.walls, p.x, p.y, 30 / state.zoom);
-    if (near) {
-      const widthFt = state.tool === 'door' ? DEFAULT_DOOR_WIDTH_FT : DEFAULT_WINDOW_WIDTH_FT;
-      addOpening(state.tool, near.wall.id, near.t, widthFt);
+    // Prefer filling a gap when the cursor is over one. (Checked BEFORE the wall
+    // test: the gap's two bordering wall ends are "near a wall", so a wall-first
+    // check would steal every click that lands right on the gap.)
+    const gap = findGap(state.walls, p.x, p.y, gapOpts());
+    if (gap) {
+      const bridge = addWall(gap.p1.x, gap.p1.y, gap.p2.x, gap.p2.y, { bridge: true });
+      addOpening(state.tool, bridge.id, 0.5, gap.lenPx / pxPerFt());
     } else {
-      // No wall here — try to bridge a gap between two collinear wall ends and
-      // fill it with the opening, centered and sized to the gap.
-      const gap = findGap(state.walls, p.x, p.y, gapOpts());
-      if (gap) {
-        const bridge = addWall(gap.p1.x, gap.p1.y, gap.p2.x, gap.p2.y);
-        addOpening(state.tool, bridge.id, 0.5, gap.lenPx / pxPerFt());
+      const near = nearestWall(state.walls, p.x, p.y, 30 / state.zoom);
+      if (near) {
+        const widthFt = state.tool === 'door' ? DEFAULT_DOOR_WIDTH_FT : DEFAULT_WINDOW_WIDTH_FT;
+        addOpening(state.tool, near.wall.id, near.t, widthFt);
       }
     }
   }
@@ -861,6 +876,7 @@ canvas.addEventListener('mousemove', (e) => {
       if (f) {
         f.x = p.x - dragging.offx;
         f.y = p.y - dragging.offy;
+        resolveAgainstWalls(f); // stop at walls instead of dragging through them
         emit();
       }
       return;
@@ -869,17 +885,17 @@ canvas.addEventListener('mousemove', (e) => {
       const f = state.furniture.find(x => x.id === dragging.id);
       if (f) {
         const item = getItem(f.type);
-        // cursor in the item's local frame (centered)
-        const a = -f.rot * Math.PI / 180;
-        const dx = p.x - f.x, dy = p.y - f.y;
-        const lx = dx * Math.cos(a) - dy * Math.sin(a);
-        const ly = dx * Math.sin(a) + dy * Math.cos(a);
-        // symmetric about center: full extent = 2 × distance to the dragged edge
-        const valueFt = dragging.edge === 'w'
-          ? (2 * Math.abs(lx)) / pxPerFt()
-          : (2 * Math.abs(ly)) / pxPerFt();
-        const next = applyResize(item, dragging.edge, valueFt, { w: f.w ?? item.w, d: f.d ?? item.d });
+        const { edge, sgn, ux, uy, anchor } = dragging;
+        // New extent = distance from the fixed (opposite) edge to the cursor,
+        // measured along the resize axis toward the dragged side.
+        const extentPx = ((p.x - anchor.x) * ux + (p.y - anchor.y) * uy) * sgn;
+        const valueFt = Math.max(0, extentPx) / pxPerFt();
+        const next = applyResize(item, edge, valueFt, { w: f.w ?? item.w, d: f.d ?? item.d });
         f.w = next.w; f.d = next.d;
+        // Recenter so the anchored edge stays put (only the dragged side moved).
+        const halfPx = ((edge === 'w' ? next.w : next.d) * pxPerFt()) / 2;
+        f.x = anchor.x + sgn * halfPx * ux;
+        f.y = anchor.y + sgn * halfPx * uy;
         resolveAgainstWalls(f); // grow into open space, not through walls
         emit();
       }
@@ -964,14 +980,15 @@ canvas.addEventListener('mousemove', (e) => {
     canvas.style.cursor = 'crosshair';
   }
 
-  // hover preview for door/window
+  // hover preview for door/window — gap first (see placement note above), so the
+  // preview appears when the cursor is right on a gap, not only in its middle.
   if (state.tool === 'door' || state.tool === 'window') {
-    const near = nearestWall(state.walls, p.x, p.y, 30 / state.zoom);
-    if (near) {
-      state.hover = near;
+    const gap = findGap(state.walls, p.x, p.y, gapOpts());
+    if (gap) {
+      state.hover = { gap };
     } else {
-      const gap = findGap(state.walls, p.x, p.y, gapOpts());
-      state.hover = gap ? { gap } : null;
+      const near = nearestWall(state.walls, p.x, p.y, 30 / state.zoom);
+      state.hover = near || null;
     }
     draw();
     return;

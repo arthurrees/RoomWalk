@@ -2,10 +2,10 @@
 import {
   state, subscribe, emit, setTool, setView, setScale, resetAll, reseedIds,
   clearWalls, clearOpenings, clearFurniture, deleteSelection, armFurniture,
-  replaceWalls,
+  replaceWalls, setDetectedOpenings,
 } from './state.js';
-import { detectWalls } from './detect.js';
-import { wallLengthPx, parseLength, formatLength, formatArea, FT_PER_M } from './geom.js';
+import { detectWalls, detectOpenings } from './detect.js';
+import { wallLengthPx, parseLength, formatLength, formatArea, FT_PER_M, PX_PER_FT_FALLBACK } from './geom.js';
 import { CATALOG, CATEGORIES, getItem, applyResize, sizeNote, bedSizeName } from './furniture.js';
 import { resolveAgainstWalls } from './collision.js';
 import * as view2d from './view2d.js';
@@ -245,6 +245,7 @@ advMenu.querySelectorAll('button[data-action]').forEach(b => {
     else if (a === 'calibrate-sqft') openCalibrateSqft();
     else if (a === 'calibrate-distance') openCalibrateDistance();
     else if (a === 'detect-walls') runDetectWalls();
+    else if (a === 'detect-openings') runDetectOpenings();
     else if (a === 'clear-walls') { clearWalls(); toast('Walls cleared'); }
     else if (a === 'clear-openings') { clearOpenings(); toast('Doors/windows cleared'); }
     else if (a === 'clear-furniture') { clearFurniture(); toast('Furniture cleared'); }
@@ -271,6 +272,33 @@ function runDetectWalls() {
     if (state.view !== '2d') switchView('2d');
     const n = walls.length;
     toast(`Detected ${n} wall${n === 1 ? '' : 's'}. Review and fix with the Wall tool, or Clear walls to redo manually.`, 5000);
+  }, 30);
+}
+
+// Auto-detect doors & windows in the gaps between the current walls. Doors get
+// a swing arc in the plan, windows have glass lines; gaps with neither are left
+// open. Re-runnable (replaces a previous detection's openings).
+function runDetectOpenings() {
+  if (!state.image?.el) { toast('Upload a floor plan first.'); return; }
+  if (state.walls.length < 2) {
+    toast('Detect or draw walls first — doors & windows sit in the gaps between them.', 4500);
+    return;
+  }
+  toast('Detecting doors & windows…');
+  setTimeout(() => {
+    const pxPerFt = state.scale ?? PX_PER_FT_FALLBACK;
+    let items = [];
+    try { items = detectOpenings(state.image.el, state.walls, { pxPerFt }); }
+    catch (err) { console.error(err); toast('Detection failed — place doors/windows manually.', 4000); return; }
+    if (!items.length) {
+      toast('No doors or windows detected — add them with the Door/Window tools.', 4500);
+      return;
+    }
+    setDetectedOpenings(items);
+    if (state.view !== '2d') switchView('2d');
+    const d = items.filter(i => i.type === 'door').length;
+    const w = items.length - d;
+    toast(`Detected ${d} door${d === 1 ? '' : 's'} and ${w} window${w === 1 ? '' : 's'}. Adjust or delete any with the Pan tool.`, 5000);
   }, 30);
 }
 

@@ -46,10 +46,10 @@
           </div>
           <div class="help-section">
             <h4><span class="step">4 ·</span> Doors &amp; windows</h4>
-            <p>Choose <b>Door</b> or <b>Window</b>, then:</p>
+            <p>Two ways — try the automatic one first:</p>
             <ul>
-              <li><b>On a wall</b> — click anywhere on a wall to drop it.</li>
-              <li><b>Across a gap</b> — left an opening in the walls where a doorway goes? Hover over the gap and it auto-detects the opening and sizes the door/window to fill it. Click to place.</li>
+              <li><b>Detect doors &amp; windows (automatic)</b> — once your walls are in, open <b>Advanced ▾</b> and click <b>Detect doors &amp; windows</b>. It finds doorways and windows in the wall gaps. Works best on solid-wall plans; review and tidy up afterward.</li>
+              <li><b>Place them yourself</b> — choose <b>Door</b> or <b>Window</b>, then click on a wall to drop it. Or, if you left an open gap where a doorway goes, hover over the gap and it auto-fits a door/window to fill it.</li>
               <li><b>Adjust</b> — with the <b>Pan</b> cursor, click one to select, then drag the middle to move it, drag an end to resize, or press <kbd>Delete</kbd> to remove.</li>
             </ul>
           </div>
@@ -63,14 +63,22 @@
             </ul>
           </div>
           <div class="help-section">
-            <h4><span class="step">6 ·</span> View in 3D &amp; Walk</h4>
+            <h4><span class="step">6 ·</span> Deleting things</h4>
+            <p>With the <b>Pan</b> cursor, click any wall, door, window, or furniture piece to select it, then press <kbd>Delete</kbd> (or <kbd>Backspace</kbd>) to remove it — works in 2D, 3D, and Walk.</p>
+            <ul>
+              <li>Deleting a <b>door or window placed across a gap</b> reopens the gap — it won't leave a solid wall behind.</li>
+              <li>To clear a whole category at once, use <b>Advanced ▾ → Clear walls / Clear doors/windows / Clear furniture</b>.</li>
+            </ul>
+          </div>
+          <div class="help-section">
+            <h4><span class="step">7 ·</span> View in 3D &amp; Walk</h4>
             <ul>
               <li><b>3D</b> — drag to orbit, scroll to zoom. You can place &amp; move items here too.</li>
               <li><b>Walk</b> — click-drag to look, <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows to move, <kbd>Q</kbd>/<kbd>E</kbd> to turn. You're 5'9" tall and walls/furniture are solid.</li>
             </ul>
           </div>
           <div class="help-section">
-            <h4><span class="step">7 ·</span> Save your work</h4>
+            <h4><span class="step">8 ·</span> Save your work</h4>
             <p><b>Save</b> downloads your whole project (plan + walls + everything) as one file. <b>Open</b> loads it back later to continue where you left off.</p>
           </div>
         </div>
@@ -103,6 +111,7 @@
           <button data-action="calibrate-sqft">Calibrate by square footage…</button>
           <button data-action="calibrate-distance">Calibrate by selected wall…</button>
           <button data-action="detect-walls">Detect walls (beta)</button>
+          <button data-action="detect-openings">Detect doors &amp; windows (beta)</button>
           <label class="row">
             <span>Blueprint outline</span>
             <input type="checkbox" id="outline-mode" checked />
