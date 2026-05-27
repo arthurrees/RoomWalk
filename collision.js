@@ -17,7 +17,7 @@ export function furnitureOBB(f) {
 
 function wallOBBs() {
   const hh = (WALL_THICK_FT * pxPerFt()) / 2;
-  return state.walls.map(w => ({
+  return state.walls.filter(w => !w.hidden).map(w => ({
     cx: (w.x1 + w.x2) / 2, cy: (w.y1 + w.y2) / 2,
     hw: wallLengthPx(w) / 2, hh, angle: wallAngle(w),
   }));
@@ -28,7 +28,7 @@ function wallOBBs() {
 // { x, y, rot } or null if there are no walls. Used for both placed items and
 // the live placement ghost (so it rides the wall before you drop it).
 export function wallSnapPose(item, x, y, d) {
-  const near = nearestWall(state.walls, x, y, Infinity);
+  const near = nearestWall(state.walls.filter(w => !w.hidden), x, y, Infinity);
   if (!near) return null;
   const wall = near.wall;
   const dx = wall.x2 - wall.x1, dy = wall.y2 - wall.y1;
@@ -52,6 +52,13 @@ export function snapToWall(f) {
   f.x = pose.x; f.y = pose.y; f.rot = pose.rot;
 }
 
+// Chairs tuck under tables, so a chair and a table don't block each other (their
+// tops are at different heights). Every other pair collides.
+function piecesPass(typeA, typeB) {
+  const ka = getItem(typeA)?.kind, kb = getItem(typeB)?.kind;
+  return (ka === 'chair' && kb === 'table') || (ka === 'table' && kb === 'chair');
+}
+
 // Slide a piece out of any walls OR other floor furniture it overlaps, into open
 // space. Iterates so it settles out of multiple obstacles (corners, packed
 // items). Mutates f.x/f.y. Wall-mounted items snap to a wall instead, and are
@@ -60,7 +67,8 @@ export function resolveAgainstWalls(f) {
   if (getItem(f.type)?.mount === 'wall') { snapToWall(f); return; }
   const obstacles = wallOBBs();
   for (const g of state.furniture) {
-    if (g.id === f.id || getItem(g.type)?.mount === 'wall') continue;
+    if (g.id === f.id || g.hidden || getItem(g.type)?.mount === 'wall') continue;
+    if (piecesPass(f.type, g.type)) continue; // e.g. a chair tucking under a table
     obstacles.push(furnitureOBB(g));
   }
   if (!obstacles.length) return;
@@ -119,14 +127,15 @@ export function fitBetweenWalls(f) {
 // True if f still overlaps a wall or another furniture item. Wall-mounted items
 // are elevated, so they never clip (and floor items ignore them).
 export function isClipping(f) {
-  if (getItem(f.type)?.mount === 'wall') return false;
+  if (f.hidden || getItem(f.type)?.mount === 'wall') return false;
   const A = furnitureOBB(f);
   for (const W of wallOBBs()) {
     const m = obbOverlapMTV(A, W);
     if (m && m.depth > CLIP_EPS) return true;
   }
   for (const g of state.furniture) {
-    if (g.id === f.id || getItem(g.type)?.mount === 'wall') continue;
+    if (g.id === f.id || g.hidden || getItem(g.type)?.mount === 'wall') continue;
+    if (piecesPass(f.type, g.type)) continue; // chair under table isn't a clip
     const m = obbOverlapMTV(A, furnitureOBB(g));
     if (m && m.depth > CLIP_EPS) return true;
   }

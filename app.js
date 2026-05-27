@@ -2,7 +2,7 @@
 import {
   state, subscribe, emit, setTool, setView, setScale, resetAll, reseedIds,
   clearWalls, clearOpenings, clearFurniture, deleteSelection, armFurniture,
-  replaceWalls, setDetectedOpenings,
+  replaceWalls, setDetectedOpenings, toggleHidden, showAllHidden,
 } from './state.js';
 import { detectWalls, detectOpenings } from './detect.js';
 import { wallLengthPx, parseLength, formatLength, formatArea, FT_PER_M, PX_PER_FT_FALLBACK } from './geom.js';
@@ -177,7 +177,7 @@ function buildProjectData() {
     roomFloors: state.roomFloors,
     walls: state.walls,
     openings: state.openings,
-    furniture: state.furniture.map(({ id, type, x, y, rot, w, d, mountH }) => ({ id, type, x, y, rot, w, d, mountH })),
+    furniture: state.furniture.map(({ id, type, x, y, rot, w, d, mountH, hidden }) => ({ id, type, x, y, rot, w, d, mountH, hidden })),
     image: state.image ? { dataUrl: state.image.dataUrl || null, w: state.image.w, h: state.image.h } : null,
   };
 }
@@ -273,7 +273,7 @@ function editableSnapshot() {
   return JSON.stringify({
     walls: state.walls,
     openings: state.openings,
-    furniture: state.furniture.map(({ id, type, x, y, rot, w, d, mountH }) => ({ id, type, x, y, rot, w, d, mountH })),
+    furniture: state.furniture.map(({ id, type, x, y, rot, w, d, mountH, hidden }) => ({ id, type, x, y, rot, w, d, mountH, hidden })),
     scale: state.scale, units: state.units, wallHeightFt: state.wallHeightFt, grid: state.grid,
     floorStyle: state.floorStyle, wallColor: state.wallColor, roomFloors: state.roomFloors,
   });
@@ -380,6 +380,7 @@ advMenu.querySelectorAll('button[data-action]').forEach(b => {
     else if (a === 'clear-walls') { clearWalls(); toast('Walls cleared'); }
     else if (a === 'clear-openings') { clearOpenings(); toast('Doors/windows cleared'); }
     else if (a === 'clear-furniture') { clearFurniture(); toast('Furniture cleared'); }
+    else if (a === 'show-hidden') { showAllHidden(); toast('All hidden objects shown'); }
     else if (a === 'reset-all') { if (confirm('Reset everything?')) { resetAll(); toast('Reset.'); } }
   });
 });
@@ -803,6 +804,7 @@ itemPanel.addEventListener('click', (e) => {
   const act = e.target.dataset.act;
   if (!act) return;
   if (act === 'delete') deleteSelection();
+  else if (act === 'hide') toggleHidden();
   else if (act === 'rotate') rotateFurniture90();
   else if (act === 'w-') nudgeFurniture('w', -1);
   else if (act === 'w+') nudgeFurniture('w', 1);
@@ -873,9 +875,19 @@ function updateItemPanel() {
   const wallRow = document.getElementById('ip-wall');
   const roomRow = document.getElementById('ip-room');
   const deleteBtn = itemPanel.querySelector('[data-act="delete"]');
+  const hideBtn = itemPanel.querySelector('[data-act="hide"]');
   wallRow.hidden = sel?.kind !== 'wall';
   roomRow.hidden = sel?.kind !== 'room';
   deleteBtn.style.display = sel?.kind === 'room' ? 'none' : ''; // rooms aren't deletable
+  // Hide/Show: walls, openings, furniture (rooms can't be hidden).
+  const hideable = sel && sel.kind !== 'room';
+  hideBtn.style.display = hideable ? '' : 'none';
+  if (hideable) {
+    const obj = sel.kind === 'wall' ? state.walls.find(w => w.id === sel.id)
+      : sel.kind === 'opening' ? state.openings.find(o => o.id === sel.id)
+      : state.furniture.find(f => f.id === sel.id);
+    hideBtn.textContent = obj?.hidden ? 'Show' : 'Hide';
+  }
   if (sel?.kind === 'wall') {
     const w = state.walls.find(x => x.id === sel.id);
     if (!w) { itemPanel.hidden = true; return; }

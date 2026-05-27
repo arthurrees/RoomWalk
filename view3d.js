@@ -268,9 +268,11 @@ export function rebuild() {
     sceneRoot.add(grid);
   }
 
-  // Per wall: build segments (with cutouts above/below openings)
+  // Per wall: build segments (with cutouts above/below openings). Hidden walls
+  // are skipped entirely; hidden openings keep their cutout but draw nothing.
   const wallHeight = state.wallHeightFt;
   for (const w of state.walls) {
+    if (w.hidden) continue;
     const openings = state.openings.filter(o => o.wallId === w.id);
     const segments = buildWallSegments(w, openings, wallHeight);
     for (const seg of segments) {
@@ -278,17 +280,18 @@ export function rebuild() {
       if (mesh) sceneRoot.add(mesh);
     }
     // Window glass panes
-    for (const o of openings.filter(o => o.type === 'window')) {
+    for (const o of openings.filter(o => o.type === 'window' && !o.hidden)) {
       const pane = buildWindowPane(w, o);
       if (pane) sceneRoot.add(pane);
     }
     // Door jambs (slim frame inside cutout)
-    for (const o of openings.filter(o => o.type === 'door')) {
+    for (const o of openings.filter(o => o.type === 'door' && !o.hidden)) {
       const jamb = buildDoorJamb(w, o);
       if (jamb) sceneRoot.add(jamb);
     }
     // Invisible pick proxies so doors/windows are clickable/selectable in 3D
     for (const o of openings) {
+      if (o.hidden) continue;
       const proxy = buildOpeningProxy(o);
       if (proxy) sceneRoot.add(proxy);
     }
@@ -296,6 +299,7 @@ export function rebuild() {
 
   // Furniture & fixtures
   for (const f of state.furniture) {
+    if (f.hidden) continue;
     const g = buildFurniture(f);
     if (g) sceneRoot.add(g);
     if (f._clip) {
@@ -475,6 +479,64 @@ function buildFurnitureGroup(dims) {
       if (h > 4) g.add(box(w * 0.98, 0.04, 0.02, matFurnDark, 0, h * 0.62, d / 2 + 0.02)); // fridge door seam
       break;
     }
+    case 'dresser': { // chest of drawers (also filing cabinet)
+      g.add(box(w, h, d, matFurnWood, 0, h / 2, 0));
+      const rows = Math.max(2, Math.round(h / 0.9)), fh = h / rows;
+      for (let i = 1; i < rows; i++) g.add(box(w * 0.98, 0.03, 0.02, matFurnDark, 0, i * fh, d / 2 + 0.01)); // drawer seams
+      for (let i = 0; i < rows; i++) {
+        const cy = (i + 0.5) * fh;
+        for (const hx of [-w * 0.22, w * 0.22]) g.add(box(0.12, 0.12, 0.06, matFurnMetal, hx, cy, d / 2 + 0.03)); // knobs
+      }
+      break;
+    }
+    case 'wardrobe': {
+      g.add(box(w, h, d, matFurnWood, 0, h / 2, 0));
+      g.add(box(0.03, h * 0.96, 0.02, matFurnDark, 0, h / 2, d / 2 + 0.01)); // center door seam
+      for (const hx of [-0.1, 0.1]) g.add(box(0.05, h * 0.16, 0.05, matFurnMetal, hx, h * 0.5, d / 2 + 0.03)); // handles
+      break;
+    }
+    case 'bookcase': { // open carcass with shelves
+      const t = 0.08;
+      g.add(box(w, h, t, matFurnWood, 0, h / 2, -d / 2 + t / 2));   // back
+      g.add(box(t, h, d, matFurnWood, -w / 2 + t / 2, h / 2, 0));   // left
+      g.add(box(t, h, d, matFurnWood, w / 2 - t / 2, h / 2, 0));    // right
+      g.add(box(w, t, d, matFurnWood, 0, t / 2, 0));                // bottom
+      g.add(box(w, t, d, matFurnWood, 0, h - t / 2, 0));            // top
+      const gaps = Math.max(2, Math.round(h / 1.1));
+      for (let i = 1; i < gaps; i++) g.add(box(w - t * 2, t, d - t, matFurnWood, 0, h * i / gaps, 0)); // shelves
+      break;
+    }
+    case 'bench': {
+      const legT = Math.min(w, d) * 0.12, seatT = h * 0.22;
+      g.add(box(w, seatT, d, matFurnWood, 0, h - seatT / 2, 0)); // seat
+      const lx = w / 2 - legT, lz = d / 2 - legT;
+      for (const sx of [-lx, lx]) for (const sz of [-lz, lz]) g.add(box(legT, h - seatT, legT, matFurnWood, sx, (h - seatT) / 2, sz));
+      break;
+    }
+    case 'tvstand': { // low media console
+      const footH = Math.min(0.25, h * 0.12);
+      g.add(box(w, h - footH, d, matFurnDark, 0, footH + (h - footH) / 2, 0)); // cabinet
+      const lx = w / 2 - 0.15, lz = d / 2 - 0.08;
+      for (const sx of [-lx, lx]) for (const sz of [-lz, lz]) g.add(box(0.1, footH, 0.1, matFurnMetal, sx, footH / 2, sz)); // feet
+      const bays = Math.max(2, Math.round(w / 2.5));
+      for (let i = 1; i < bays; i++) g.add(box(0.03, h - footH, d * 0.98, matFurnMetal, -w / 2 + i * (w / bays), footH + (h - footH) / 2, 0)); // bay seams
+      for (let i = 0; i < bays; i++) g.add(box(w / bays * 0.4, 0.04, 0.05, matFurnMetal, -w / 2 + (i + 0.5) * (w / bays), h * 0.55, d / 2 + 0.03)); // handles
+      break;
+    }
+    case 'shower': {
+      const baseH = 0.3, t = 0.06;
+      g.add(box(w, baseH, d, matFurnCeramic, 0, baseH / 2, 0)); // pan
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(box(t, h, t, matFurnMetal, sx * (w / 2 - t / 2), h / 2, sz * (d / 2 - t / 2))); // frame posts
+      g.add(box(w, h - baseH, t, matFurnBasin, 0, baseH + (h - baseH) / 2, -d / 2 + t / 2)); // back glass
+      g.add(box(t, h - baseH, d, matFurnBasin, -w / 2 + t / 2, baseH + (h - baseH) / 2, 0)); // side glass
+      g.add(box(0.1, 0.1, 0.1, matFurnMetal, w * 0.3, h * 0.88, -d / 2 + 0.25)); // shower head
+      break;
+    }
+    case 'screen': { // wall-mounted TV
+      g.add(box(w, h, d, matFurnDark, 0, h / 2, 0)); // bezel/body
+      g.add(box(w * 0.92, h * 0.84, 0.01, matFurnMetal, 0, h / 2, d / 2 + 0.006)); // screen face
+      break;
+    }
     case 'box':
     default: {
       const mat = dims.dark ? matFurnDark : matFurnWood;
@@ -597,7 +659,7 @@ function buildSelectionHandles() {
   if (sel.kind === 'furniture') {
     const f = state.furniture.find(x => x.id === sel.id);
     const item = f && getItem(f.type);
-    if (!item) return;
+    if (!item || f.hidden) return; // hidden items aren't shown, so no grips
     if (item.resize !== 'stretch' && item.resize !== 'units') return; // fixed/snap: panel only
     const w = f.w ?? item.w, d = f.d ?? item.d;
     const cx = px2ft(f.x - _offset.x), cz = px2ft(f.y - _offset.y);
@@ -1116,6 +1178,7 @@ let collisionFurniture = [];
 function rebuildCollision() {
   collisionSegments = [];
   for (const w of state.walls) {
+    if (w.hidden) continue; // hidden walls don't block the walking player
     const lenFt = px2ft(wallLengthPx(w));
     // Only doors are walkable; windows still block.
     const doors = state.openings
@@ -1135,7 +1198,7 @@ function rebuildCollision() {
   // Placed furniture are solid obstacles (rotated rectangles, in feet). Wall-
   // mounted items are elevated, so you walk under/past them — skip those.
   collisionFurniture = state.furniture
-    .filter(f => getItem(f.type)?.mount !== 'wall')
+    .filter(f => !f.hidden && getItem(f.type)?.mount !== 'wall')
     .map(f => {
       const item = getItem(f.type);
       const w = f.w ?? (item ? item.w : 2), d = f.d ?? (item ? item.d : 2);

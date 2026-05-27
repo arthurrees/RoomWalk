@@ -147,6 +147,13 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
   survive edits; room detection is cached by walls+overrides.
 - **Drag collision.** Furniture stops at walls *during* a drag (resolve runs each
   frame, not just on release), in 2D and 3D/Walk.
+- **Hide objects.** Select any wall, door/window, or furniture item and hit
+  **Hide** (the button flips to **Show**). Hidden objects vanish from 3D/Walk and
+  lose all collision, so you can stand outside and place wall items on the far
+  interior wall without the near wall blocking the view or grabbing the snap. In
+  2D they stay faintly drawn (alpha 0.22) so they're still selectable to unhide.
+  `Advanced → Canvas → Show all hidden` reveals everything at once. The `hidden`
+  flag persists through save/open and undo/redo.
 - **Undo / redo + autosave.** Debounced history (`Ctrl+Z` / `Ctrl+Shift+Z` or the
   ↶ ↷ buttons; a drag coalesces into one step). Autosaves to `localStorage` and
   restores the last session on load; falls back to geometry-only if the embedded
@@ -184,7 +191,9 @@ Next / ideas:
 1. Richer materials (procedural wood grain / tile lines, optional ceiling &
    baseboards) — the box-proxy look is still flat.
 2. Touch / mobile support (currently mouse-only) — separate effort.
-3. More item detail (dresser, wardrobe, TV stand, shower stall still plain).
+3. More item detail — dresser/wardrobe/bookcase/bench/TV stand/shower/wall
+   TV now have dedicated proxies; ottoman and the thin wall pieces (shelf,
+   mirror, range hood) are still plain boxes. (Crib was removed from the catalog.)
 4. OCR auto-reading of printed dimension labels for auto-calibration.
 5. Pick walls/rooms in 3D is done; per-room *wall* colour and numeric room entry
    ("add a 12×10 room") would round out reconstruction.

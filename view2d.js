@@ -156,6 +156,7 @@ export function draw() {
   ctx.shadowBlur = 3;
   for (const w of state.walls) {
     const isSel = state.selection?.kind === 'wall' && state.selection.id === w.id;
+    ctx.globalAlpha = w.hidden ? 0.22 : 1; // hidden walls stay faintly visible/selectable in 2D
     ctx.lineWidth = (isSel ? 6 : 4.5) / state.zoom;
     ctx.strokeStyle = isSel ? PAL.wallSel : PAL.wall;
     ctx.beginPath();
@@ -167,9 +168,11 @@ export function draw() {
 
   // Endpoint dots
   for (const w of state.walls) {
+    ctx.globalAlpha = w.hidden ? 0.22 : 1;
     drawWorldDot(w.x1, w.y1, 3 / state.zoom, PAL.node);
     drawWorldDot(w.x2, w.y2, 3 / state.zoom, PAL.node);
   }
+  ctx.globalAlpha = 1;
 
   // In-progress wall
   if (state.draftWallStart) {
@@ -334,6 +337,7 @@ function drawOpening(o) {
   // perpendicular thickness lines (door = ~6", drawn as a thicker strip)
   const thickness = 6 / state.zoom;
   ctx.save();
+  if (o.hidden) ctx.globalAlpha = 0.22; // hidden: faint but still selectable in 2D
   ctx.translate(p1.x, p1.y);
   ctx.rotate(ang);
   const len = dist(p1.x, p1.y, p2.x, p2.y);
@@ -577,6 +581,8 @@ function drawFurniture(f) {
   const isSel = state.selection?.kind === 'furniture' && state.selection.id === f.id;
   const clip = !!f._clip;
   const wallMount = item.mount === 'wall';
+  ctx.save();
+  if (f.hidden) ctx.globalAlpha = 0.22; // hidden: faint but still selectable in 2D
   drawFurnitureShape(item, f.x, f.y, f.rot, f.w ?? item.w, f.d ?? item.d, {
     fill: PAL.furnFill,
     stroke: clip ? PAL.warn : (isSel ? PAL.furnSel : (wallMount ? PAL.wallMountStroke : PAL.furnStroke)),
@@ -600,6 +606,7 @@ function drawFurniture(f) {
     ctx.textAlign = 'start';
     ctx.restore();
   }
+  ctx.restore();
 }
 
 function drawHandleDot(wx, wy) {
