@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Floor Plan Designer</title>
+<link rel="stylesheet" href="styles.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Floor Plan Designer</div>
+    <div class="view-toggle" role="tablist" aria-label="View">
+      <button data-view="2d" class="active">2D</button>
+      <button data-view="3d">3D</button>
+      <button data-view="walk">Walk</button>
+    </div>
+    <div class="topbar-right">
+      <label class="file-btn">
+        Upload floor plan
+        <input type="file" id="file-input" accept="image/*" hidden />
+      </label>
+      <button id="open-btn" class="ghost">Open</button>
+      <button id="save-btn" class="ghost">Save</button>
+      <input type="file" id="open-input" accept=".json,application/json" hidden />
+      <div class="dropdown">
+        <button id="advanced-btn" class="ghost">Advanced ▾</button>
+        <div class="dropdown-menu" id="advanced-menu" hidden>
+          <label class="row">
+            <span>Units</span>
+            <select id="units-select">
+              <option value="imperial">Feet / inches</option>
+              <option value="metric">Meters</option>
+            </select>
+          </label>
+          <button data-action="set-scale">Set scale from a dimension…</button>
+          <button data-action="calibrate-sqft">Calibrate by square footage…</button>
+          <button data-action="calibrate-distance">Calibrate by selected wall…</button>
+          <label class="row">
+            <span>Blueprint outline</span>
+            <input type="checkbox" id="outline-mode" checked />
+          </label>
+          <label class="row">
+            <span>Outline detail</span>
+            <input type="range" id="outline-threshold" min="40" max="220" value="120" />
+          </label>
+          <label class="row">
+            <span>Plan opacity</span>
+            <input type="range" id="opacity" min="0" max="100" value="85" />
+          </label>
+          <label class="row">
+            <span id="wall-height-label">Wall height (ft)</span>
+            <input type="number" id="wall-height" min="6" max="14" step="0.5" value="9" />
+          </label>
+          <button data-action="clear-walls">Clear walls</button>
+          <button data-action="clear-openings">Clear doors/windows</button>
+          <button data-action="clear-furniture">Clear furniture</button>
+          <button data-action="reset-all" class="danger">Reset everything</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <aside class="toolbar" id="toolbar">
+    <button class="tool active" data-tool="pan" title="Pan / select">
+      <span class="ico">✥</span><span>Pan</span>
+    </button>
+    <button class="tool" data-tool="wall" title="Draw wall (click two points)">
+      <span class="ico">▱</span><span>Wall</span>
+    </button>
+    <button class="tool" data-tool="door" title="Place door on wall">
+      <span class="ico">⌐</span><span>Door</span>
+    </button>
+    <button class="tool" data-tool="window" title="Place window on wall">
+      <span class="ico">▭</span><span>Window</span>
+    </button>
+    <button class="tool" data-tool="select" title="Select / resize / delete">
+      <span class="ico">◎</span><span>Select</span>
+    </button>
+    <button class="tool" data-tool="furniture" title="Place furniture & fixtures">
+      <span class="ico">🛋</span><span>Items</span>
+    </button>
+    <div class="divider"></div>
+    <div class="scale-info" id="scale-info">No scale set</div>
+  </aside>
+
+  <main class="stage">
+    <div class="palette" id="palette" hidden>
+      <div class="palette-head">Items <span class="palette-hint">click, then click on the plan · R rotates</span></div>
+      <div class="palette-body" id="palette-body"></div>
+    </div>
+    <div class="readout" id="readout" hidden>
+      <div class="readout-row"><span>Scale</span><b id="ro-scale">—</b></div>
+      <div class="readout-row"><span>Footprint</span><b id="ro-foot">—</b></div>
+      <div class="readout-row readout-area"><span>Floor area</span><b id="ro-area">—</b></div>
+    </div>
+    <div id="view-2d" class="view active">
+      <canvas id="canvas2d"></canvas>
+      <div class="hint" id="hint-2d">Upload a floor plan to begin.</div>
+    </div>
+    <div id="view-3d" class="view">
+      <canvas id="canvas3d"></canvas>
+      <div class="hint" id="hint-3d">Drag to orbit · scroll to zoom · right-drag to pan</div>
+    </div>
+
+    <div class="item-panel" id="item-panel" hidden>
+      <div class="ip-title" id="ip-title">Item</div>
+      <div class="ip-row" id="ip-size">
+        <div class="ip-dim">
+          <button data-act="w-">−</button><span class="ip-val" id="ip-w">—</span><button data-act="w+">+</button>
+          <span class="ip-axis">W</span>
+        </div>
+        <div class="ip-dim">
+          <button data-act="d-">−</button><span class="ip-val" id="ip-d">—</span><button data-act="d+">+</button>
+          <span class="ip-axis">D</span>
+        </div>
+      </div>
+      <div class="ip-actions">
+        <button data-act="rotate">⟳ Rotate</button>
+        <button data-act="delete" class="danger">Delete</button>
+      </div>
+    </div>
+  </main>
+
+  <div class="walk-hud" id="walk-hud" hidden>
+    <div class="walk-instructions">Click + drag to look · WASD / arrows to move</div>
+  </div>
+  <div class="walk-paused" id="walk-paused" hidden></div>
+
+  <div class="modal" id="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-title" id="modal-title">Calibrate</div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-actions">
+        <button id="modal-cancel" class="ghost">Cancel</button>
+        <button id="modal-ok">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
