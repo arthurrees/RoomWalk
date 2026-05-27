@@ -2,7 +2,9 @@
 import {
   state, subscribe, emit, setTool, setView, setScale, resetAll, reseedIds,
   clearWalls, clearOpenings, clearFurniture, deleteSelection, armFurniture,
+  replaceWalls,
 } from './state.js';
+import { detectWalls } from './detect.js';
 import { wallLengthPx, parseLength, formatLength, formatArea, FT_PER_M } from './geom.js';
 import { CATALOG, CATEGORIES, getItem, applyResize, sizeNote, bedSizeName } from './furniture.js';
 import { resolveAgainstWalls } from './collision.js';
@@ -242,12 +244,35 @@ advMenu.querySelectorAll('button[data-action]').forEach(b => {
     if (a === 'set-scale') startSetScale();
     else if (a === 'calibrate-sqft') openCalibrateSqft();
     else if (a === 'calibrate-distance') openCalibrateDistance();
+    else if (a === 'detect-walls') runDetectWalls();
     else if (a === 'clear-walls') { clearWalls(); toast('Walls cleared'); }
     else if (a === 'clear-openings') { clearOpenings(); toast('Doors/windows cleared'); }
     else if (a === 'clear-furniture') { clearFurniture(); toast('Furniture cleared'); }
     else if (a === 'reset-all') { if (confirm('Reset everything?')) { resetAll(); toast('Reset.'); } }
   });
 });
+
+// Auto-detect walls from the uploaded plan. Replaces the current wall set;
+// the user reviews and fixes with the Wall tool, or "Clear walls" to redo
+// manually if the plan didn't detect cleanly (thin double-line plans won't).
+function runDetectWalls() {
+  if (!state.image?.el) { toast('Upload a floor plan first.'); return; }
+  toast('Detecting walls…');
+  // Defer so the toast paints before the synchronous detection pass runs.
+  setTimeout(() => {
+    let walls = [];
+    try { walls = detectWalls(state.image.el); }
+    catch (err) { console.error(err); toast('Wall detection failed — trace manually with the Wall tool.', 4000); return; }
+    if (!walls.length) {
+      toast('Couldn’t auto-detect walls on this plan — trace them manually with the Wall tool.', 4500);
+      return;
+    }
+    replaceWalls(walls);
+    if (state.view !== '2d') switchView('2d');
+    const n = walls.length;
+    toast(`Detected ${n} wall${n === 1 ? '' : 's'}. Review and fix with the Wall tool, or Clear walls to redo manually.`, 5000);
+  }, 30);
+}
 
 // Opacity slider
 const opacitySlider = document.getElementById('opacity');

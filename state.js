@@ -123,6 +123,15 @@ export function clearWalls() {
   emit();
 }
 
+// Replace all walls (e.g. from auto-detection) in one shot. Openings reference
+// wall ids that no longer exist, so they're cleared too.
+export function replaceWalls(walls) {
+  state.walls = walls.map(w => ({ id: id(), x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2 }));
+  state.openings = [];
+  state.selection = null;
+  emit();
+}
+
 export function clearOpenings() {
   state.openings = [];
   state.selection = null;
