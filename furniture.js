@@ -40,6 +40,28 @@ export const CATALOG = [
   { id: 'dining',   label: 'Dining table', cat: 'Living', kind: 'table', w: IN(48), d: IN(30), h: IN(30), color: '#a07a52', resize: 'stretch', minW: IN(36), maxW: IN(96), minD: IN(28), maxD: IN(48) },
   { id: 'chair',    label: 'Dining chair', cat: 'Living', kind: 'chair', w: IN(18), d: IN(20), h: IN(34), color: '#a07a52', resize: 'fixed' },
   { id: 'desk',     label: 'Desk',        cat: 'Living', kind: 'table', w: IN(48), d: IN(24), h: IN(30), color: '#a07a52', resize: 'stretch', minW: IN(30), maxW: IN(84), minD: IN(20), maxD: IN(36) },
+  { id: 'bookcase',    label: 'Bookcase',     cat: 'Living', kind: 'box',   w: IN(36), d: IN(12), h: IN(72), color: '#a07a52', resize: 'stretch', minW: IN(24), maxW: IN(72), minD: IN(10), maxD: IN(16) },
+  { id: 'bench',       label: 'Bench',        cat: 'Living', kind: 'box',   w: IN(48), d: IN(16), h: IN(18), color: '#a07a52', resize: 'stretch', minW: IN(30), maxW: IN(72), minD: IN(12), maxD: IN(20) },
+  { id: 'ottoman',     label: 'Ottoman',      cat: 'Living', kind: 'box',   w: IN(24), d: IN(24), h: IN(17), color: '#8f99a6', resize: 'stretch', minW: IN(16), maxW: IN(48), minD: IN(16), maxD: IN(36) },
+  { id: 'sidetable',   label: 'Side table',   cat: 'Living', kind: 'table', w: IN(20), d: IN(20), h: IN(24), color: '#a07a52', resize: 'stretch', minW: IN(14), maxW: IN(30), minD: IN(14), maxD: IN(28) },
+  { id: 'officechair', label: 'Office chair', cat: 'Living', kind: 'chair', w: IN(26), d: IN(26), h: IN(38), color: '#6a6e74', resize: 'fixed' },
+  { id: 'filecab',     label: 'Filing cabinet', cat: 'Living', kind: 'box', w: IN(15), d: IN(22), h: IN(28), color: '#6a6e74', resize: 'stretch', minW: IN(14), maxW: IN(36), minD: IN(18), maxD: IN(28) },
+  { id: 'barstool',    label: 'Bar stool',    cat: 'Kitchen', kind: 'chair', w: IN(15), d: IN(15), h: IN(26), color: '#6a6e74', resize: 'fixed' },
+  { id: 'crib',        label: 'Crib',         cat: 'Bedroom', kind: 'box',   w: IN(30), d: IN(54), h: IN(36), color: '#9aa6b2', resize: 'fixed' },
+
+  // --- Laundry ---
+  { id: 'washer', label: 'Washer', cat: 'Laundry', kind: 'appliance', w: IN(27), d: IN(30), h: IN(38), color: '#cdd2d8', resize: 'fixed' },
+  { id: 'dryer',  label: 'Dryer',  cat: 'Laundry', kind: 'appliance', w: IN(27), d: IN(30), h: IN(38), color: '#cdd2d8', resize: 'fixed' },
+
+  // --- Wall-mounted (mount:'wall'; mountH = height of the item's BOTTOM off the
+  // floor, in feet). These snap flush to a wall and don't collide with floor
+  // furniture or the walking player (they sit up out of the way).
+  { id: 'upcabinet', label: 'Wall cabinet',     cat: 'Wall', kind: 'appliance', mount: 'wall', mountH: 4.5, w: IN(30), d: IN(12), h: IN(30), color: '#b9a896', resize: 'stretch', minW: IN(15), maxW: IN(48), minD: IN(10), maxD: IN(14) },
+  { id: 'shelf',     label: 'Floating shelf',   cat: 'Wall', kind: 'box',       mount: 'wall', mountH: 4.0, w: IN(36), d: IN(10), h: IN(2),  color: '#a07a52', resize: 'stretch', minW: IN(18), maxW: IN(72), minD: IN(6),  maxD: IN(12) },
+  { id: 'walltv',    label: 'Wall TV',          cat: 'Wall', kind: 'box',       mount: 'wall', mountH: 3.3, w: IN(48), d: IN(4),  h: IN(28), color: '#3a3d42', resize: 'stretch', minW: IN(24), maxW: IN(80), minD: IN(3),  maxD: IN(6) },
+  { id: 'medcab',    label: 'Medicine cabinet', cat: 'Wall', kind: 'appliance', mount: 'wall', mountH: 4.5, w: IN(24), d: IN(6),  h: IN(30), color: '#e7eaee', resize: 'stretch', minW: IN(16), maxW: IN(36), minD: IN(5),  maxD: IN(8) },
+  { id: 'mirror',    label: 'Mirror',           cat: 'Wall', kind: 'box',       mount: 'wall', mountH: 3.0, w: IN(30), d: IN(2),  h: IN(36), color: '#dfe6ec', light: true, resize: 'stretch', minW: IN(18), maxW: IN(60), minD: IN(1), maxD: IN(3) },
+  { id: 'hood',      label: 'Range hood',       cat: 'Wall', kind: 'box',       mount: 'wall', mountH: 4.5, w: IN(30), d: IN(20), h: IN(14), color: '#c4c8ce', resize: 'stretch', minW: IN(24), maxW: IN(48), minD: IN(16), maxD: IN(24) },
 ];
 
 export function getItem(id) {
@@ -63,7 +85,7 @@ export function bedSizeName(widthFt) {
   return best.name;
 }
 
-export const CATEGORIES = ['Kitchen', 'Bathroom', 'Bedroom', 'Living'];
+export const CATEGORIES = ['Kitchen', 'Bathroom', 'Bedroom', 'Living', 'Laundry', 'Wall'];
 
 // How many repeating units fit in width w (feet) for a 'units' item.
 export function unitCount(item, w) {

@@ -155,7 +155,7 @@ function saveProject() {
     outlineThreshold: state.outlineThreshold,
     walls: state.walls,
     openings: state.openings,
-    furniture: state.furniture.map(({ id, type, x, y, rot, w, d }) => ({ id, type, x, y, rot, w, d })),
+    furniture: state.furniture.map(({ id, type, x, y, rot, w, d, mountH }) => ({ id, type, x, y, rot, w, d, mountH })),
     image: state.image ? { dataUrl: state.image.dataUrl || null, w: state.image.w, h: state.image.h } : null,
   };
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
@@ -659,7 +659,21 @@ itemPanel.addEventListener('click', (e) => {
   else if (act === 'w+') nudgeFurniture('w', 1);
   else if (act === 'd-') nudgeFurniture('d', -1);
   else if (act === 'd+') nudgeFurniture('d', 1);
+  else if (act === 'h-') nudgeHeight(-1);
+  else if (act === 'h+') nudgeHeight(1);
 });
+
+// Raise/lower a wall-mounted item (its mount height off the floor), 3" per step.
+function nudgeHeight(dir) {
+  const f = selectedFurniture();
+  if (!f) return;
+  const item = getItem(f.type);
+  if (!item || item.mount !== 'wall') return;
+  const cur = f.mountH ?? item.mountH ?? 4;
+  const maxH = Math.max(0, state.wallHeightFt - item.h);
+  f.mountH = Math.max(0, Math.min(maxH, cur + dir * 0.25));
+  emit();
+}
 
 function selectedFurniture() {
   if (state.selection?.kind !== 'furniture') return null;
@@ -695,7 +709,12 @@ function updateItemPanel() {
     document.getElementById('ip-title').textContent = title;
     document.getElementById('ip-w').textContent = formatLength(f.w, state.units);
     document.getElementById('ip-d').textContent = formatLength(f.d, state.units);
-    sizeRow.style.display = item.resize === 'fixed' ? 'none' : '';
+    // Height control only for wall-mounted items (and force the row visible so it shows).
+    const wallMount = item.mount === 'wall';
+    const hEl = document.getElementById('ip-height');
+    hEl.hidden = !wallMount;
+    if (wallMount) document.getElementById('ip-h').textContent = formatLength(f.mountH ?? item.mountH ?? 4, state.units);
+    sizeRow.style.display = (item.resize === 'fixed' && !wallMount) ? 'none' : '';
     rotateBtn.style.display = '';
   } else if (sel?.kind === 'opening') {
     const o = state.openings.find(x => x.id === sel.id);

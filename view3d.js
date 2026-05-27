@@ -8,7 +8,7 @@ import {
   pointOnWall, projectPointToSegment, wallAngle,
 } from './geom.js';
 import { getItem, unitCount, applyResize } from './furniture.js';
-import { resolveAgainstWalls, fitBetweenWalls, recomputeClips } from './collision.js';
+import { resolveAgainstWalls, fitBetweenWalls, recomputeClips, wallSnapPose } from './collision.js';
 
 const canvas = document.getElementById('canvas3d');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -334,7 +334,8 @@ function buildFurniture(f) {
   };
   const g = buildFurnitureGroup(dims);
   g.userData.furnitureId = f.id;
-  g.position.set(px2ft(f.x - _offset.x), 0, px2ft(f.y - _offset.y));
+  const mountY = item.mount === 'wall' ? (f.mountH ?? item.mountH ?? 4) : 0; // lift wall items off the floor
+  g.position.set(px2ft(f.x - _offset.x), mountY, px2ft(f.y - _offset.y));
   g.rotation.y = -(f.rot || 0) * Math.PI / 180;
   return g;
 }
@@ -418,7 +419,8 @@ function buildSelectionHandles() {
     const r = (f.rot || 0) * Math.PI / 180;
     const ux = Math.cos(r), uz = Math.sin(r);   // width axis (world XZ)
     const vx = -Math.sin(r), vz = Math.cos(r);  // depth axis
-    const y = 0.5;
+    // Wall items float at their mount height — put the grips on the item, not the floor.
+    const y = item.mount === 'wall' ? ((f.mountH ?? item.mountH ?? 4) + item.h / 2) : 0.5;
     addHandle(cx + ux * w / 2, y, cz + uz * w / 2, { type: 'furn-resize', id: f.id, axis: 'w', sgn: 1 });
     addHandle(cx - ux * w / 2, y, cz - uz * w / 2, { type: 'furn-resize', id: f.id, axis: 'w', sgn: -1 });
     addHandle(cx + vx * d / 2, y, cz + vz * d / 2, { type: 'furn-resize', id: f.id, axis: 'd', sgn: 1 });
@@ -494,6 +496,17 @@ function updateGhost(type, rot, worldPt) {
     ghost = { type, rot, group: g };
   }
   ghost.group.visible = true;
+  const gi = getItem(type);
+  if (gi && gi.mount === 'wall') {
+    // Ride the nearest wall at mount height so you can position before dropping.
+    const img = worldToImage(worldPt);
+    const pose = wallSnapPose(gi, img.x, img.y);
+    if (pose) {
+      ghost.group.position.set(px2ft(pose.x - _offset.x), gi.mountH ?? 4, px2ft(pose.y - _offset.y));
+      ghost.group.rotation.y = -pose.rot * Math.PI / 180;
+      return;
+    }
+  }
   ghost.group.position.set(worldPt.x, 0, worldPt.z);
   ghost.group.rotation.y = -rot * Math.PI / 180;
 }
@@ -908,15 +921,18 @@ function rebuildCollision() {
     }
     if (cursor < 1) addCollisionPart(w, cursor, 1);
   }
-  // Placed furniture are solid obstacles (rotated rectangles, in feet).
-  collisionFurniture = state.furniture.map(f => {
-    const item = getItem(f.type);
-    const w = f.w ?? (item ? item.w : 2), d = f.d ?? (item ? item.d : 2);
-    return {
-      cx: px2ft(f.x - _offset.x), cz: px2ft(f.y - _offset.y),
-      hw: w / 2, hd: d / 2, a: -(f.rot || 0) * Math.PI / 180,
-    };
-  });
+  // Placed furniture are solid obstacles (rotated rectangles, in feet). Wall-
+  // mounted items are elevated, so you walk under/past them — skip those.
+  collisionFurniture = state.furniture
+    .filter(f => getItem(f.type)?.mount !== 'wall')
+    .map(f => {
+      const item = getItem(f.type);
+      const w = f.w ?? (item ? item.w : 2), d = f.d ?? (item ? item.d : 2);
+      return {
+        cx: px2ft(f.x - _offset.x), cz: px2ft(f.y - _offset.y),
+        hw: w / 2, hd: d / 2, a: -(f.rot || 0) * Math.PI / 180,
+      };
+    });
 }
 
 function distPointSeg2D(px, pz, ax, az, bx, bz) {

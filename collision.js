@@ -1,7 +1,7 @@
 // Furniture ↔ wall (and furniture ↔ furniture) collision in image-pixel space.
 // Walls are modeled as thin oriented boxes; furniture as their footprint OBB.
 import { state } from './state.js';
-import { PX_PER_FT_FALLBACK, wallLengthPx, wallAngle, obbOverlapMTV } from './geom.js';
+import { PX_PER_FT_FALLBACK, wallLengthPx, wallAngle, obbOverlapMTV, nearestWall, wallsBoundingBox } from './geom.js';
 import { getItem, applyResize } from './furniture.js';
 
 const WALL_THICK_FT = 0.5;
@@ -23,9 +23,42 @@ function wallOBBs() {
   }));
 }
 
+// Pose (image px) for a wall-mounted item placed near (x,y): flush against the
+// nearest wall, facing the building interior, oriented along the wall. Returns
+// { x, y, rot } or null if there are no walls. Used for both placed items and
+// the live placement ghost (so it rides the wall before you drop it).
+export function wallSnapPose(item, x, y, d) {
+  const near = nearestWall(state.walls, x, y, Infinity);
+  if (!near) return null;
+  const wall = near.wall;
+  const dx = wall.x2 - wall.x1, dy = wall.y2 - wall.y1;
+  const len = Math.hypot(dx, dy) || 1;
+  let nx = -dy / len, ny = dx / len;              // wall normal
+  // Face the building interior (toward the walls' bounding-box center).
+  const bb = wallsBoundingBox(state.walls);
+  const ix = bb ? (bb.minX + bb.maxX) / 2 : x;
+  const iy = bb ? (bb.minY + bb.maxY) / 2 : y;
+  const side = ((ix - near.x) * nx + (iy - near.y) * ny) >= 0 ? 1 : -1;
+  nx *= side; ny *= side;
+  const dd = d ?? item.d;
+  const offset = ((WALL_THICK_FT / 2 + dd / 2) * pxPerFt());
+  return { x: near.x + nx * offset, y: near.y + ny * offset, rot: wallAngle(wall) * 180 / Math.PI };
+}
+
+// Snap a placed wall-mounted item flush against the nearest wall. Mutates f.
+export function snapToWall(f) {
+  const item = getItem(f.type);
+  if (!item) return;
+  const pose = wallSnapPose(item, f.x, f.y, f.d ?? item.d);
+  if (!pose) return; // no walls yet — leave it where it is
+  f.x = pose.x; f.y = pose.y; f.rot = pose.rot;
+}
+
 // Slide a piece out of any walls it overlaps, into open space. Iterates so
 // corners (two walls) resolve toward the room interior. Mutates f.x/f.y.
+// Wall-mounted items snap to a wall instead (they're meant to sit on it).
 export function resolveAgainstWalls(f) {
+  if (getItem(f.type)?.mount === 'wall') { snapToWall(f); return; }
   const walls = wallOBBs();
   if (!walls.length) return;
   for (let iter = 0; iter < 8; iter++) {
@@ -56,6 +89,7 @@ function deepestWallOverlap(f) {
 export function fitBetweenWalls(f) {
   const item = getItem(f.type);
   if (!item) return;
+  if (item.mount === 'wall') { snapToWall(f); return; }
   resolveAgainstWalls(f);
   if (item.resize === 'fixed' || item.resize === 'snap') return;
   const clearanceFt = 0.05;
@@ -79,15 +113,17 @@ export function fitBetweenWalls(f) {
   }
 }
 
-// True if f still overlaps a wall or another furniture item.
+// True if f still overlaps a wall or another furniture item. Wall-mounted items
+// are elevated, so they never clip (and floor items ignore them).
 export function isClipping(f) {
+  if (getItem(f.type)?.mount === 'wall') return false;
   const A = furnitureOBB(f);
   for (const W of wallOBBs()) {
     const m = obbOverlapMTV(A, W);
     if (m && m.depth > CLIP_EPS) return true;
   }
   for (const g of state.furniture) {
-    if (g.id === f.id) continue;
+    if (g.id === f.id || getItem(g.type)?.mount === 'wall') continue;
     const m = obbOverlapMTV(A, furnitureOBB(g));
     if (m && m.depth > CLIP_EPS) return true;
   }

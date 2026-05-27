@@ -6,7 +6,7 @@ import {
   DEFAULT_DOOR_WIDTH_FT, DEFAULT_WINDOW_WIDTH_FT, formatLength,
 } from './geom.js';
 import { getItem, unitCount, applyResize, sizeNote } from './furniture.js';
-import { resolveAgainstWalls, fitBetweenWalls, recomputeClips } from './collision.js';
+import { resolveAgainstWalls, fitBetweenWalls, recomputeClips, wallSnapPose } from './collision.js';
 
 // ThinkPad-inspired palette: matte near-black, graphite reference lines,
 // ThinkPad red as the single accent for the user's own geometry.
@@ -29,6 +29,7 @@ const PAL = {
   scalePick: '#f0a500',     // amber — a distinct, temporary measurement guide
   furnFill: 'rgba(125,134,144,0.32)',
   furnStroke: '#aab2bd',
+  wallMountStroke: '#7fb7c8',   // teal dashed outline = wall-mounted item
   furnLabel: '#dfe4ea',
   furnSel: '#ff3b43',
   furnGhost: 'rgba(170,178,189,0.45)',
@@ -548,12 +549,13 @@ function drawFurniture(f) {
   if (!item) return;
   const isSel = state.selection?.kind === 'furniture' && state.selection.id === f.id;
   const clip = !!f._clip;
+  const wallMount = item.mount === 'wall';
   drawFurnitureShape(item, f.x, f.y, f.rot, f.w ?? item.w, f.d ?? item.d, {
     fill: PAL.furnFill,
-    stroke: clip ? PAL.warn : (isSel ? PAL.furnSel : PAL.furnStroke),
+    stroke: clip ? PAL.warn : (isSel ? PAL.furnSel : (wallMount ? PAL.wallMountStroke : PAL.furnStroke)),
     label: PAL.furnLabel,
     lineW: (isSel || clip) ? 2.5 : 1.5,
-    dashed: clip,
+    dashed: clip || wallMount, // dashed outline signals a wall-mounted item
   });
   // resize handles when selected (skip fixed items)
   if (isSel && item.resize !== 'fixed') {
@@ -587,13 +589,19 @@ function drawHandleDot(wx, wy) {
 function drawFurnitureGhost(typeId, x, y, rotDeg) {
   const item = getItem(typeId);
   if (!item) return;
+  let gx = x, gy = y, grot = rotDeg, wallMount = item.mount === 'wall';
+  if (wallMount) {
+    const pose = wallSnapPose(item, x, y); // ghost rides the nearest wall
+    if (pose) { gx = pose.x; gy = pose.y; grot = pose.rot; }
+  }
   ctx.save();
   ctx.globalAlpha = 0.7;
-  drawFurnitureShape(item, x, y, rotDeg, item.w, item.d, {
+  drawFurnitureShape(item, gx, gy, grot, item.w, item.d, {
     fill: PAL.furnGhost,
-    stroke: PAL.furnStroke,
+    stroke: wallMount ? PAL.wallMountStroke : PAL.furnStroke,
     label: null,
     lineW: 1.5,
+    dashed: wallMount,
   });
   ctx.restore();
 }
