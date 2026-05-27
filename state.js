@@ -121,9 +121,9 @@ export function setDetectedOpenings(items) {
   emit();
 }
 
-// Hide/show the selected wall, opening, or furniture. Hidden objects vanish from
-// 3D/Walk (and lose collision) for an unobstructed view; in 2D they stay faintly
-// visible so you can still select and unhide them.
+// Hide/show the selected wall, opening, or furniture. Hidden objects lose
+// collision and render see-through (a low-opacity "ghost" in 3D/Walk, faint in
+// 2D) so you can look past them yet still see them and click to unhide.
 export function toggleHidden() {
   const sel = state.selection;
   if (!sel) return;

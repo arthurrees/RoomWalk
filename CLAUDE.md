@@ -148,12 +148,13 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
 - **Drag collision.** Furniture stops at walls *during* a drag (resolve runs each
   frame, not just on release), in 2D and 3D/Walk.
 - **Hide objects.** Select any wall, door/window, or furniture item and hit
-  **Hide** (the button flips to **Show**). Hidden objects vanish from 3D/Walk and
-  lose all collision, so you can stand outside and place wall items on the far
-  interior wall without the near wall blocking the view or grabbing the snap. In
-  2D they stay faintly drawn (alpha 0.22) so they're still selectable to unhide.
-  `Advanced → Canvas → Show all hidden` reveals everything at once. The `hidden`
-  flag persists through save/open and undo/redo.
+  **Hide** (the button flips to **Show**). Hidden objects lose all collision, so
+  you can stand outside and place wall items on the far interior wall without the
+  near wall blocking the view or grabbing the snap. They still render as
+  see-through "ghosts" (low opacity) in 3D/Walk and faintly in 2D, so you can see
+  they're there and click them in any view to unhide (the panel button reads
+  **Show**). `Advanced → Canvas → Show all hidden` reveals everything at once. The
+  `hidden` flag persists through save/open and undo/redo.
 - **Undo / redo + autosave.** Debounced history (`Ctrl+Z` / `Ctrl+Shift+Z` or the
   ↶ ↷ buttons; a drag coalesces into one step). Autosaves to `localStorage` and
   restores the last session on load; falls back to geometry-only if the embedded

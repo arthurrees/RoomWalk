@@ -268,30 +268,30 @@ export function rebuild() {
     sceneRoot.add(grid);
   }
 
-  // Per wall: build segments (with cutouts above/below openings). Hidden walls
-  // are skipped entirely; hidden openings keep their cutout but draw nothing.
+  // Per wall: build segments (with cutouts above/below openings). Hidden objects
+  // still draw, but as see-through "ghosts" (and with collision off elsewhere) so
+  // you can look past them yet still see they're there and click to unhide.
   const wallHeight = state.wallHeightFt;
   for (const w of state.walls) {
-    if (w.hidden) continue;
+    const wallGhost = w.hidden;
     const openings = state.openings.filter(o => o.wallId === w.id);
     const segments = buildWallSegments(w, openings, wallHeight);
     for (const seg of segments) {
       const mesh = buildWallSegmentMesh(w, seg);
-      if (mesh) sceneRoot.add(mesh);
+      if (mesh) { if (wallGhost) makeGhost(mesh); sceneRoot.add(mesh); }
     }
     // Window glass panes
-    for (const o of openings.filter(o => o.type === 'window' && !o.hidden)) {
+    for (const o of openings.filter(o => o.type === 'window')) {
       const pane = buildWindowPane(w, o);
-      if (pane) sceneRoot.add(pane);
+      if (pane) { if (wallGhost || o.hidden) makeGhost(pane); sceneRoot.add(pane); }
     }
     // Door jambs (slim frame inside cutout)
-    for (const o of openings.filter(o => o.type === 'door' && !o.hidden)) {
+    for (const o of openings.filter(o => o.type === 'door')) {
       const jamb = buildDoorJamb(w, o);
-      if (jamb) sceneRoot.add(jamb);
+      if (jamb) { if (wallGhost || o.hidden) makeGhost(jamb); sceneRoot.add(jamb); }
     }
-    // Invisible pick proxies so doors/windows are clickable/selectable in 3D
+    // Invisible pick proxies so doors/windows (incl. hidden ones) are clickable.
     for (const o of openings) {
-      if (o.hidden) continue;
       const proxy = buildOpeningProxy(o);
       if (proxy) sceneRoot.add(proxy);
     }
@@ -299,10 +299,9 @@ export function rebuild() {
 
   // Furniture & fixtures
   for (const f of state.furniture) {
-    if (f.hidden) continue;
     const g = buildFurniture(f);
-    if (g) sceneRoot.add(g);
-    if (f._clip) {
+    if (g) { if (f.hidden) makeGhost(g); sceneRoot.add(g); }
+    if (f._clip && !f.hidden) {
       const marker = buildClipMarker(f);
       if (marker) sceneRoot.add(marker);
     }
@@ -310,6 +309,26 @@ export function rebuild() {
 
   // Drag handles for the currently selected item
   buildSelectionHandles();
+}
+
+// Make a built mesh/group see-through (for "hidden" objects): clone each material
+// at low opacity and drop shadows. Picking still works (raycast hits geometry,
+// not material), so a ghost object stays clickable to unhide.
+const HIDDEN_OPACITY = 0.3;
+function fadeMaterial(mat) {
+  const c = mat.clone();
+  c.transparent = true;
+  c.opacity = HIDDEN_OPACITY;
+  c.depthWrite = false;
+  return c;
+}
+function makeGhost(obj) {
+  obj.traverse((o) => {
+    if (!o.isMesh || !o.material) return;
+    o.castShadow = false;
+    o.receiveShadow = false;
+    o.material = Array.isArray(o.material) ? o.material.map(fadeMaterial) : fadeMaterial(o.material);
+  });
 }
 
 const matClip = new THREE.LineBasicMaterial({ color: 0xff4d4d });
