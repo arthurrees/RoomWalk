@@ -14,6 +14,9 @@ export const state = {
   outlineThreshold: 120, // luminance cutoff: darker than this = wall line
   scale: null,           // pixels per foot (null until calibrated)
   units: 'imperial',     // 'imperial' (ft/in) | 'metric' (m) — display only
+  floorStyle: 'wood',    // 3D floor material preset: wood | tile | carpet | concrete
+  wallColor: '#e9e6df',  // 3D wall paint colour
+  roomFloors: [],        // per-room floor overrides: [{ x, y, style }] keyed by an interior point
   walls: [],             // { id, x1, y1, x2, y2 }
   openings: [],          // { id, type:'door'|'window', wallId, t (0-1), width (ft) }
   furniture: [],         // { id, type (catalog id), x, y, rot (deg) }
@@ -23,6 +26,7 @@ export const state = {
   wallHeightFt: 9,
   pan: { x: 0, y: 0 },
   zoom: 1,
+  grid: false,           // build-from-scratch: show a 1-ft grid and snap walls to it
   // when drawing a wall: in-progress start point
   draftWallStart: null,
   hover: null,           // for cursor preview: opening preview or wall snap
@@ -101,24 +105,17 @@ export function addOpening(type, wallId, t, widthFt) {
   return o;
 }
 
-// Place auto-detected doors/windows. Two item kinds:
-//   { kind:'bridge', x1,y1,x2,y2, type, widthFt } — door: fills a gap with a
-//     short bridge wall (tagged auto) plus an opening spanning it.
-//   { kind:'onwall', wallId, t, type, widthFt }   — window: opening on an
-//     existing wall (windows don't gap; they thin the wall).
-// Idempotent: a prior run's auto bridges and auto openings are removed first,
-// so re-running replaces rather than stacks.
+// Place auto-detected doors/windows. Each item { x1,y1,x2,y2, type, widthFt }
+// fills a gap with a short "bridge" wall (tagged auto) plus an opening spanning
+// it. Idempotent: a prior run's auto bridges + openings are removed first, so
+// re-running replaces rather than stacks.
 export function setDetectedOpenings(items) {
   state.walls = state.walls.filter(w => !w.auto);
   state.openings = state.openings.filter(o => !o.auto);
   for (const it of items) {
-    if (it.kind === 'bridge') {
-      const w = { id: id(), x1: it.x1, y1: it.y1, x2: it.x2, y2: it.y2, auto: true, bridge: true };
-      state.walls.push(w);
-      state.openings.push({ id: id(), type: it.type, wallId: w.id, t: 0.5, width: it.widthFt, auto: true });
-    } else {
-      state.openings.push({ id: id(), type: it.type, wallId: it.wallId, t: it.t, width: it.widthFt, auto: true });
-    }
+    const w = { id: id(), x1: it.x1, y1: it.y1, x2: it.x2, y2: it.y2, auto: true, bridge: true };
+    state.walls.push(w);
+    state.openings.push({ id: id(), type: it.type, wallId: w.id, t: 0.5, width: it.widthFt, auto: true });
   }
   state.selection = null;
   emit();
@@ -127,6 +124,7 @@ export function setDetectedOpenings(items) {
 export function deleteSelection() {
   if (!state.selection) return;
   const { kind, id: sid } = state.selection;
+  if (kind === 'room') { state.selection = null; emit(); return; } // rooms aren't deletable
   if (kind === 'wall') {
     state.walls = state.walls.filter(w => w.id !== sid);
     state.openings = state.openings.filter(o => o.wallId !== sid);

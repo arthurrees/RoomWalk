@@ -46,7 +46,6 @@ scene.add(sun);
 
 // Material library
 const matWall = new THREE.MeshStandardMaterial({ color: 0xe9e6df, roughness: 0.85, metalness: 0 });
-const matFloor = new THREE.MeshStandardMaterial({ color: 0x6b5e4b, roughness: 0.9 });
 const matDoorJamb = new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 0.7 });
 const matWindow = new THREE.MeshStandardMaterial({
   color: 0x88c0ff, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.45,
@@ -74,8 +73,169 @@ function px3(x, y) {
   return new THREE.Vector3(px2ft(x - _offset.x), 0, px2ft(y - _offset.y));
 }
 
+// Whole-home floor materials (approximated with colour + roughness, no textures).
+const FLOOR_PRESETS = {
+  wood:     { color: 0x9c6b40, rough: 0.70 },
+  tile:     { color: 0xd0d3cd, rough: 0.35 },
+  carpet:   { color: 0x9c9488, rough: 0.97 },
+  concrete: { color: 0x8d8f92, rough: 0.90 },
+};
+
+// Apply the global wall colour to the shared wall material (floors use
+// floorMatFor per room / globally).
+function applyStyle() {
+  if (state.wallColor) matWall.color.set(state.wallColor);
+}
+
+// Material for a wall: its own colour if set, else the shared (global) material.
+// Per-colour materials are cached so we don't churn one per segment.
+const wallMatCache = new Map();
+function wallMat(wall) {
+  if (!wall.color) return matWall;
+  let m = wallMatCache.get(wall.color);
+  if (!m) { m = matWall.clone(); wallMatCache.set(wall.color, m); }
+  m.color.set(wall.color);
+  return m;
+}
+
+// ---- Floor materials + per-room floors -------------------------------------
+const floorMatCache = new Map();
+function floorMatFor(style) {
+  const fp = FLOOR_PRESETS[style] || FLOOR_PRESETS.wood;
+  let m = floorMatCache.get(style);
+  if (!m) { m = new THREE.MeshStandardMaterial({ color: fp.color, roughness: fp.rough }); floorMatCache.set(style, m); }
+  return m;
+}
+
+// Rooms = enclosed regions found by flood-filling the wall-bounded floor. Walls
+// (full centerlines, incl. door spans) are barriers, so doorways don't merge
+// rooms. Cached by walls+overrides so it isn't recomputed during furniture drags.
+let _roomCache = null, _roomSig = '';
+function getRooms() {
+  const sig = effectiveScale().toFixed(2) + '|' +
+    state.walls.map(w => `${w.x1 | 0},${w.y1 | 0},${w.x2 | 0},${w.y2 | 0}`).join(';') + '|' +
+    JSON.stringify(state.roomFloors || []);
+  if (sig !== _roomSig) { _roomCache = detectRooms(); _roomSig = sig; }
+  return _roomCache;
+}
+
+function detectRooms() {
+  const bb = wallsBoundingBox(state.walls);
+  if (!bb || state.walls.length < 3) return [];
+  const sc = effectiveScale();
+  const cell = Math.max(4, sc * 0.5); // ~0.5 ft cells
+  const margin = cell * 2;
+  const ox = bb.minX - margin, oy = bb.minY - margin;
+  const W = Math.ceil((bb.w + margin * 2) / cell);
+  const H = Math.ceil((bb.h + margin * 2) / cell);
+  if (W < 3 || H < 3 || W * H > 200000) return [];
+
+  const barrier = new Uint8Array(W * H);
+  const r = Math.max(0, Math.round((WALL_THICKNESS_FT * sc) / cell / 2));
+  for (const w of state.walls) {
+    const steps = Math.ceil(dist(w.x1, w.y1, w.x2, w.y2) / (cell * 0.5)) + 1;
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      const gx = Math.floor(((w.x1 + (w.x2 - w.x1) * t) - ox) / cell);
+      const gy = Math.floor(((w.y1 + (w.y2 - w.y1) * t) - oy) / cell);
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        const x = gx + dx, y = gy + dy;
+        if (x >= 0 && y >= 0 && x < W && y < H) barrier[y * W + x] = 1;
+      }
+    }
+  }
+
+  const reg = new Int32Array(W * H).fill(-1);
+  const stack = [];
+  const regions = [];
+  let id = 0;
+  for (let i0 = 0; i0 < W * H; i0++) {
+    if (barrier[i0] || reg[i0] !== -1) continue;
+    reg[i0] = id; stack.length = 0; stack.push(i0);
+    const cells = []; let exterior = false;
+    while (stack.length) {
+      const c = stack.pop(); cells.push(c);
+      const cx = c % W, cy = (c / W) | 0;
+      if (cx === 0 || cy === 0 || cx === W - 1 || cy === H - 1) exterior = true;
+      if (cx > 0 && !barrier[c - 1] && reg[c - 1] === -1) { reg[c - 1] = id; stack.push(c - 1); }
+      if (cx < W - 1 && !barrier[c + 1] && reg[c + 1] === -1) { reg[c + 1] = id; stack.push(c + 1); }
+      if (cy > 0 && !barrier[c - W] && reg[c - W] === -1) { reg[c - W] = id; stack.push(c - W); }
+      if (cy < H - 1 && !barrier[c + W] && reg[c + W] === -1) { reg[c + W] = id; stack.push(c + W); }
+    }
+    regions.push({ id, cells, exterior }); id++;
+  }
+
+  const minCells = Math.max(8, Math.round(W * H * 0.004));
+  const rooms = [];
+  for (const region of regions) {
+    if (region.exterior || region.cells.length < minCells) continue;
+    let sx = 0, sy = 0;
+    for (const c of region.cells) { sx += c % W; sy += (c / W) | 0; }
+    const ccx = sx / region.cells.length, ccy = sy / region.cells.length;
+    let repCell = region.cells[0], best = Infinity;
+    for (const c of region.cells) { const dx = c % W - ccx, dy = ((c / W) | 0) - ccy; const dd = dx * dx + dy * dy; if (dd < best) { best = dd; repCell = c; } }
+    const repX = ox + (repCell % W + 0.5) * cell;
+    const repY = oy + (((repCell / W) | 0) + 0.5) * cell;
+    const key = `${Math.round(repX)},${Math.round(repY)}`;
+    let style = state.floorStyle;
+    for (const o of (state.roomFloors || [])) {
+      const gx = Math.floor((o.x - ox) / cell), gy = Math.floor((o.y - oy) / cell);
+      if (gx >= 0 && gy >= 0 && gx < W && gy < H && reg[gy * W + gx] === region.id) { style = o.style; break; }
+    }
+    const patches = rectsFromCells(region.cells, W).map(rc => {
+      const x0 = ox + rc.gx0 * cell, x1 = ox + rc.gx1 * cell;
+      const y0 = oy + rc.gy0 * cell, y1 = oy + rc.gy1 * cell;
+      return {
+        cx: px2ft((x0 + x1) / 2 - _offset.x), cz: px2ft((y0 + y1) / 2 - _offset.y),
+        ww: px2ft(x1 - x0), wd: px2ft(y1 - y0),
+      };
+    });
+    rooms.push({ key, style, x: repX, y: repY, patches });
+  }
+  return rooms;
+}
+
+// Partition a region's cells into maximal rectangles (greedy meshing) so each
+// room renders as a few large floor quads instead of thousands of cells.
+function rectsFromCells(cells, W) {
+  let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+  for (const c of cells) { const x = c % W, y = (c / W) | 0; if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y; }
+  const gw = maxx - minx + 1, gh = maxy - miny + 1;
+  const inR = new Uint8Array(gw * gh);
+  for (const c of cells) inR[((c / W | 0) - miny) * gw + (c % W - minx)] = 1;
+  const used = new Uint8Array(gw * gh);
+  const rects = [];
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+    if (!inR[y * gw + x] || used[y * gw + x]) continue;
+    let w = 1; while (x + w < gw && inR[y * gw + x + w] && !used[y * gw + x + w]) w++;
+    let h = 1;
+    grow: while (y + h < gh) { for (let k = 0; k < w; k++) { const idx = (y + h) * gw + (x + k); if (!inR[idx] || used[idx]) break grow; } h++; }
+    for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) used[(y + yy) * gw + (x + xx)] = 1;
+    rects.push({ gx0: minx + x, gy0: miny + y, gx1: minx + x + w, gy1: miny + y + h });
+  }
+  return rects;
+}
+
+function addRoomFloors(rooms) {
+  for (const room of rooms) {
+    const mat = floorMatFor(room.style);
+    for (const p of room.patches) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(p.ww, p.wd), mat);
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(p.cx, 0, p.cz);
+      m.receiveShadow = true;
+      m.userData.roomKey = room.key;
+      m.userData.roomStyle = room.style;
+      m.userData.roomX = room.x;
+      m.userData.roomY = room.y;
+      sceneRoot.add(m);
+    }
+  }
+}
+
 // Build the scene from current state.
 export function rebuild() {
+  applyStyle();
   computeOffset();
   while (sceneRoot.children.length) {
     const c = sceneRoot.children.pop();
@@ -87,18 +247,21 @@ export function rebuild() {
 
   if (state.walls.length > 0) {
     const bb = wallsBoundingBox(state.walls);
-    const floorW = px2ft(bb.w) + 8;
-    const floorH = px2ft(bb.h) + 8;
-
-    // Floor
-    const floorGeo = new THREE.PlaneGeometry(floorW, floorH);
-    const floor = new THREE.Mesh(floorGeo, matFloor);
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    sceneRoot.add(floor);
+    const rooms = getRooms();
+    if (rooms.length) {
+      addRoomFloors(rooms); // per-room floor patches (own material each)
+    } else {
+      // No enclosed rooms detected — one floor at the global material.
+      const floorW = px2ft(bb.w) + 8, floorH = px2ft(bb.h) + 8;
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(floorW, floorH), floorMatFor(state.floorStyle));
+      floor.rotation.x = -Math.PI / 2;
+      floor.receiveShadow = true;
+      sceneRoot.add(floor);
+    }
 
     // Grid helper for orientation
-    const grid = new THREE.GridHelper(Math.max(floorW, floorH), Math.round(Math.max(floorW, floorH)));
+    const span = px2ft(Math.max(bb.w, bb.h)) + 8;
+    const grid = new THREE.GridHelper(span, Math.round(span));
     grid.material.transparent = true;
     grid.material.opacity = 0.18;
     grid.position.y = 0.01;
@@ -368,6 +531,26 @@ function floorPointFromEvent(e) {
   return hit ? { x: hit.x, z: hit.z } : null;
 }
 
+// World point where the cursor ray actually hits a WALL mesh. Used for placing/
+// moving wall-mounted items by pointing AT the wall — the floor projection would
+// sail over a near wall and land by the far wall, snapping to the wrong one.
+function wallPointFromEvent(e) {
+  _ray.setFromCamera(ndcFromEvent(e), camera);
+  const hits = _ray.intersectObjects(sceneRoot.children, true);
+  for (const h of hits) {
+    let o = h.object;
+    while (o) { if (o.userData?.wallId != null) return { x: h.point.x, z: h.point.z }; o = o.parent; }
+  }
+  return null;
+}
+
+// Where a placed/dragged item should follow the cursor: wall items point at the
+// wall under the cursor (fallback to the floor point); floor items use the floor.
+function placementPoint(e, type) {
+  if (getItem(type)?.mount === 'wall') return wallPointFromEvent(e) || floorPointFromEvent(e);
+  return floorPointFromEvent(e);
+}
+
 function worldToImage(w) {
   return { x: w.x * effectiveScale() + _offset.x, y: w.z * effectiveScale() + _offset.y };
 }
@@ -389,6 +572,8 @@ function raycastBody(e) {
     while (o) {
       if (o.userData?.furnitureId != null) return { kind: 'furniture', id: o.userData.furnitureId };
       if (o.userData?.openingId != null) return { kind: 'opening', id: o.userData.openingId };
+      if (o.userData?.wallId != null) return { kind: 'wall', id: o.userData.wallId };
+      if (o.userData?.roomKey != null) return { kind: 'room', key: o.userData.roomKey, style: o.userData.roomStyle, x: o.userData.roomX, y: o.userData.roomY };
       o = o.parent;
     }
   }
@@ -507,7 +692,12 @@ function updateGhost(type, rot, worldPt) {
       return;
     }
   }
-  ghost.group.position.set(worldPt.x, 0, worldPt.z);
+  // Floor item: resolve the preview out of walls so it can't be positioned
+  // through them (mirrors what happens on drop).
+  const img = worldToImage(worldPt);
+  const tmp = { type, x: img.x, y: img.y, rot, w: gi ? gi.w : 2, d: gi ? gi.d : 2 };
+  resolveAgainstWalls(tmp);
+  ghost.group.position.set(px2ft(tmp.x - _offset.x), 0, px2ft(tmp.y - _offset.y));
   ghost.group.rotation.y = -rot * Math.PI / 180;
 }
 
@@ -603,14 +793,19 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
     e.stopImmediatePropagation(); e.preventDefault();
     return;
   }
-  // 2. Grab an item body → select + move.
+  // 2. Grab a DRAGGABLE body (furniture / opening) → select + move. Walls and
+  //    room floors aren't draggable: they're click-selected on pointerup, so we
+  //    leave the event for OrbitControls (a drag still orbits the scene).
   const body = raycastBody(e);
-  if (body) {
+  if (body && (body.kind === 'furniture' || body.kind === 'opening')) {
     state.selection = { kind: body.kind, id: body.id };
     if (body.kind === 'furniture') {
       const f = state.furniture.find(x => x.id === body.id);
+      const wallItem = getItem(f.type)?.mount === 'wall';
       const wp = floorPointFromEvent(e); const img = wp ? worldToImage(wp) : { x: f.x, y: f.y };
-      beginManip({ kind: 'furn-move', id: body.id, offx: img.x - f.x, offy: img.y - f.y });
+      // Wall items snap to the nearest wall, so track the cursor directly — the
+      // floor-plane grab offset is meaningless for an item floating at height.
+      beginManip({ kind: 'furn-move', id: body.id, offx: wallItem ? 0 : img.x - f.x, offy: wallItem ? 0 : img.y - f.y });
     } else {
       beginManip({ kind: 'open-move', id: body.id });
     }
@@ -622,12 +817,18 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 document.addEventListener('pointermove', (e) => {
   if (!in3dOrWalk()) return;
   if (manip) {
-    const wp = floorPointFromEvent(e);
+    // Moving a wall item: point at the wall under the cursor, not its floor spot.
+    let wp = null;
+    if (manip.kind === 'furn-move') {
+      const f = state.furniture.find(x => x.id === manip.id);
+      if (f && getItem(f.type)?.mount === 'wall') wp = wallPointFromEvent(e);
+    }
+    if (!wp) wp = floorPointFromEvent(e);
     if (wp) applyManip(wp);
     return;
   }
   if (state.tool === 'furniture' && state.placingFurniture) {
-    lastFloorPt = floorPointFromEvent(e);
+    lastFloorPt = placementPoint(e, state.placingFurniture);
     updateGhost(state.placingFurniture, state.placingRot, lastFloorPt);
   }
 });
@@ -639,7 +840,7 @@ document.addEventListener('pointerup', (e) => {
   downXY = null;
   if (moved >= 6) return; // it was a drag (orbit / look), not a click
   if (state.tool === 'furniture' && state.placingFurniture) {
-    const wp = floorPointFromEvent(e);
+    const wp = placementPoint(e, state.placingFurniture);
     if (wp) {
       const img = worldToImage(wp);
       const f = addFurniture(state.placingFurniture, img.x, img.y, state.placingRot);
@@ -650,8 +851,17 @@ document.addEventListener('pointerup', (e) => {
       emit();
     }
   } else if (state.tool === 'pan' || state.tool === 'select') {
-    // click empty space → deselect (body clicks are handled on pointerdown)
-    if (!raycastBody(e) && state.selection) { state.selection = null; emit(); }
+    // Click selects walls / room floors (not draggable, so handled here on the
+    // click); furniture/openings were already grabbed on pointerdown. Empty → deselect.
+    const body = raycastBody(e);
+    if (body && (body.kind === 'wall' || body.kind === 'room')) {
+      state.selection = body.kind === 'wall'
+        ? { kind: 'wall', id: body.id }
+        : { kind: 'room', key: body.key, style: body.style, x: body.x, y: body.y };
+      emit();
+    } else if (!body && state.selection) {
+      state.selection = null; emit();
+    }
   }
 });
 
@@ -708,7 +918,8 @@ function buildWallSegmentMesh(wall, seg) {
   const h = seg.yTop - seg.yBottom;
   if (h < 0.01) return null;
   const geo = new THREE.BoxGeometry(lenFt, h, WALL_THICKNESS_FT);
-  const mesh = new THREE.Mesh(geo, matWall);
+  const mesh = new THREE.Mesh(geo, wallMat(wall));
+  mesh.userData.wallId = wall.id; // selectable in 3D
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   const cx = px2ft((a.x + b.x) / 2 - _offset.x);

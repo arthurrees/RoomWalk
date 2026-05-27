@@ -1,7 +1,7 @@
 // Furniture ↔ wall (and furniture ↔ furniture) collision in image-pixel space.
 // Walls are modeled as thin oriented boxes; furniture as their footprint OBB.
 import { state } from './state.js';
-import { PX_PER_FT_FALLBACK, wallLengthPx, wallAngle, obbOverlapMTV, nearestWall, wallsBoundingBox } from './geom.js';
+import { PX_PER_FT_FALLBACK, wallLengthPx, wallAngle, obbOverlapMTV, nearestWall } from './geom.js';
 import { getItem, applyResize } from './furniture.js';
 
 const WALL_THICK_FT = 0.5;
@@ -34,11 +34,9 @@ export function wallSnapPose(item, x, y, d) {
   const dx = wall.x2 - wall.x1, dy = wall.y2 - wall.y1;
   const len = Math.hypot(dx, dy) || 1;
   let nx = -dy / len, ny = dx / len;              // wall normal
-  // Face the building interior (toward the walls' bounding-box center).
-  const bb = wallsBoundingBox(state.walls);
-  const ix = bb ? (bb.minX + bb.maxX) / 2 : x;
-  const iy = bb ? (bb.minY + bb.maxY) / 2 : y;
-  const side = ((ix - near.x) * nx + (iy - near.y) * ny) >= 0 ? 1 : -1;
+  // Mount on the side the cursor/item is on — robust for any layout (you choose
+  // the side by where you point, and the live ghost shows it).
+  const side = ((x - near.x) * nx + (y - near.y) * ny) >= 0 ? 1 : -1;
   nx *= side; ny *= side;
   const dd = d ?? item.d;
   const offset = ((WALL_THICK_FT / 2 + dd / 2) * pxPerFt());
@@ -54,18 +52,23 @@ export function snapToWall(f) {
   f.x = pose.x; f.y = pose.y; f.rot = pose.rot;
 }
 
-// Slide a piece out of any walls it overlaps, into open space. Iterates so
-// corners (two walls) resolve toward the room interior. Mutates f.x/f.y.
-// Wall-mounted items snap to a wall instead (they're meant to sit on it).
+// Slide a piece out of any walls OR other floor furniture it overlaps, into open
+// space. Iterates so it settles out of multiple obstacles (corners, packed
+// items). Mutates f.x/f.y. Wall-mounted items snap to a wall instead, and are
+// elevated so floor items pass under them (not obstacles).
 export function resolveAgainstWalls(f) {
   if (getItem(f.type)?.mount === 'wall') { snapToWall(f); return; }
-  const walls = wallOBBs();
-  if (!walls.length) return;
-  for (let iter = 0; iter < 8; iter++) {
+  const obstacles = wallOBBs();
+  for (const g of state.furniture) {
+    if (g.id === f.id || getItem(g.type)?.mount === 'wall') continue;
+    obstacles.push(furnitureOBB(g));
+  }
+  if (!obstacles.length) return;
+  for (let iter = 0; iter < 12; iter++) {
     let moved = false;
-    for (const W of walls) {
+    for (const O of obstacles) {
       const A = furnitureOBB(f);
-      const m = obbOverlapMTV(A, W);
+      const m = obbOverlapMTV(A, O);
       if (m && m.depth > 0.01) { f.x += m.x; f.y += m.y; moved = true; }
     }
     if (!moved) break;

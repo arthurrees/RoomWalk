@@ -134,6 +134,9 @@ export function draw() {
   ctx.translate(state.pan.x, state.pan.y);
   ctx.scale(state.zoom, state.zoom);
 
+  // Build-from-scratch: a 1-ft world grid to draw rooms against.
+  drawWorldGrid(rect);
+
   // Image — either the processed glowing outline or the raw upload.
   if (state.image) {
     ctx.globalAlpha = state.imageOpacity;
@@ -259,6 +262,30 @@ function drawGrid(rect) {
     ctx.moveTo(0, y); ctx.lineTo(rect.width, y);
   }
   ctx.stroke();
+}
+
+// 1-ft world-space grid (zoom/pan aware), shown only in build-from-scratch mode.
+function drawWorldGrid(rect) {
+  if (!state.grid) return;
+  const g = pxPerFt(); // one grid cell = 1 ft
+  if (!(g > 0)) return;
+  const x0 = -state.pan.x / state.zoom, x1 = (rect.width - state.pan.x) / state.zoom;
+  const y0 = -state.pan.y / state.zoom, y1 = (rect.height - state.pan.y) / state.zoom;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(127,183,200,0.18)';
+  ctx.lineWidth = 1 / state.zoom;
+  ctx.beginPath();
+  for (let x = Math.floor(x0 / g) * g; x <= x1; x += g) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
+  for (let y = Math.floor(y0 / g) * g; y <= y1; y += g) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Snap a world point to the nearest 1-ft grid intersection (grid mode only).
+function snapToGrid(x, y) {
+  if (!state.grid) return { x, y };
+  const g = pxPerFt();
+  return { x: Math.round(x / g) * g, y: Math.round(y / g) * g };
 }
 
 function drawWorldDot(x, y, r, color) {
@@ -703,8 +730,9 @@ function currentDraftWallEnd() {
   // try endpoint snap
   const snap = snapToEndpoint(state.walls, m.x, m.y, SNAP_PX / state.zoom);
   if (snap) return { x: snap.x, y: snap.y };
-  // axis snap relative to start
-  return snapToAxis(state.draftWallStart.x, state.draftWallStart.y, m.x, m.y);
+  // grid snap (scratch mode) then axis snap relative to start
+  const g = snapToGrid(m.x, m.y);
+  return snapToAxis(state.draftWallStart.x, state.draftWallStart.y, g.x, g.y);
 }
 
 // ---------- Interaction ----------
@@ -809,7 +837,7 @@ canvas.addEventListener('mousedown', (e) => {
     dragging = state.tool === 'pan' ? { kind: 'pan' } : null;
   } else if (state.tool === 'wall') {
     const snap = snapToEndpoint(state.walls, p.x, p.y, SNAP_PX / state.zoom);
-    const start = snap ? { x: snap.x, y: snap.y } : { x: p.x, y: p.y };
+    const start = snap ? { x: snap.x, y: snap.y } : snapToGrid(p.x, p.y);
     if (!state.draftWallStart) {
       state.draftWallStart = start;
       emit();

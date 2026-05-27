@@ -89,7 +89,8 @@ subscribe(() => {
   // whenever an item is selected so only the editing panel shows there.
   const editing = !!state.selection;
   const hint2 = document.getElementById('hint-2d');
-  if (hint2) hint2.style.display = (editing || state.image || state.walls.length) ? 'none' : '';
+  // Welcome card: only on the true blank start (no image, no walls, not yet in grid/scratch mode).
+  if (hint2) hint2.style.display = (editing || state.image || state.walls.length || state.grid) ? 'none' : '';
   const hint3 = document.getElementById('hint-3d');
   if (hint3) hint3.style.display = editing ? 'none' : '';
   const walkInstr = document.querySelector('.walk-instructions');
@@ -118,6 +119,23 @@ fileInput.addEventListener('change', (e) => {
   fileInput.value = '';
 });
 
+// Welcome-card buttons (empty state) reuse the top-bar actions.
+document.getElementById('welcome-upload').addEventListener('click', () => fileInput.click());
+document.getElementById('welcome-scratch').addEventListener('click', () => scratchBtn.click());
+
+// --- Start from scratch (build on a grid, no floor-plan image needed) ---
+const scratchBtn = document.getElementById('scratch-btn');
+scratchBtn.addEventListener('click', () => {
+  state.grid = true;
+  if (!state.scale) setScale(24); // declare 1 grid = 1 ft so dimensions are real-by-construction
+  if (state.view !== '2d') switchView('2d');
+  if (!state.image) view2d.fitImage(); // center the blank canvas
+  setTool('wall');
+  gridToggle.checked = true;
+  emit();
+  toast('Draw walls on the grid. Each square is 1 ft. Click two points per wall.', 4500);
+});
+
 // --- Help / how-to dropdown ---
 const helpBtn = document.getElementById('help-btn');
 const helpMenu = document.getElementById('help-menu');
@@ -142,8 +160,8 @@ openInput.addEventListener('change', (e) => {
   openInput.value = '';
 });
 
-function saveProject() {
-  const data = {
+function buildProjectData() {
+  return {
     app: 'floor-plan-designer',
     version: 1,
     savedAt: new Date().toISOString(),
@@ -153,12 +171,19 @@ function saveProject() {
     imageOpacity: state.imageOpacity,
     outlineMode: state.outlineMode,
     outlineThreshold: state.outlineThreshold,
+    grid: state.grid,
+    floorStyle: state.floorStyle,
+    wallColor: state.wallColor,
+    roomFloors: state.roomFloors,
     walls: state.walls,
     openings: state.openings,
     furniture: state.furniture.map(({ id, type, x, y, rot, w, d, mountH }) => ({ id, type, x, y, rot, w, d, mountH })),
     image: state.image ? { dataUrl: state.image.dataUrl || null, w: state.image.w, h: state.image.h } : null,
   };
-  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+}
+
+function saveProject() {
+  const blob = new Blob([JSON.stringify(buildProjectData())], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -181,13 +206,17 @@ function openProject(file) {
   reader.readAsText(file);
 }
 
-function applyProject(data) {
+function applyProject(data, doneMsg = 'Project loaded.') {
   state.units = data.units || 'imperial';
   state.scale = data.scale ?? null;
   state.wallHeightFt = data.wallHeightFt ?? 9;
   state.imageOpacity = data.imageOpacity ?? 0.85;
   state.outlineMode = data.outlineMode ?? true;
   state.outlineThreshold = data.outlineThreshold ?? 120;
+  state.grid = data.grid ?? false;
+  state.floorStyle = data.floorStyle || 'wood';
+  state.wallColor = data.wallColor || '#e9e6df';
+  state.roomFloors = data.roomFloors || [];
   state.walls = data.walls || [];
   state.openings = data.openings || [];
   state.furniture = (data.furniture || []).map(f => {
@@ -203,13 +232,16 @@ function applyProject(data) {
   opacitySlider.value = Math.round(state.imageOpacity * 100);
   outlineToggle.checked = state.outlineMode;
   outlineThreshold.value = state.outlineThreshold;
+  gridToggle.checked = state.grid;
+  floorStyleSel.value = state.floorStyle;
+  wallColorInput.value = state.wallColor;
 
   const finish = () => {
     if (state.view !== '2d') switchView('2d');
     view2d.init();      // ensure the 2D canvas is sized before fitting
     view2d.fitImage();
     emit();
-    toast('Project loaded.');
+    if (doneMsg) toast(doneMsg);
   };
   if (data.image && data.image.dataUrl) {
     const img = new Image();
@@ -226,6 +258,105 @@ function applyProject(data) {
     finish();
   }
 }
+
+// --- Autosave (localStorage) + Undo / Redo ---
+const AUTOSAVE_KEY = 'roomwalk:autosave';
+const HISTORY_MAX = 60;
+let history = [];
+let histIndex = -1;
+let applyingHistory = false;
+let commitTimer = null;
+
+// Snapshot of just the editable geometry/settings — NOT the background image
+// (it's large, rarely changes, and undo shouldn't pull the floor plan out).
+function editableSnapshot() {
+  return JSON.stringify({
+    walls: state.walls,
+    openings: state.openings,
+    furniture: state.furniture.map(({ id, type, x, y, rot, w, d, mountH }) => ({ id, type, x, y, rot, w, d, mountH })),
+    scale: state.scale, units: state.units, wallHeightFt: state.wallHeightFt, grid: state.grid,
+    floorStyle: state.floorStyle, wallColor: state.wallColor, roomFloors: state.roomFloors,
+  });
+}
+
+function applySnapshot(snap) {
+  const d = JSON.parse(snap);
+  applyingHistory = true;
+  state.units = d.units; state.scale = d.scale; state.wallHeightFt = d.wallHeightFt; state.grid = d.grid;
+  state.floorStyle = d.floorStyle || 'wood'; state.wallColor = d.wallColor || '#e9e6df';
+  state.roomFloors = d.roomFloors || [];
+  state.walls = d.walls; state.openings = d.openings;
+  state.furniture = d.furniture.map(f => {
+    const it = getItem(f.type);
+    return { ...f, w: f.w ?? (it ? it.w : 2), d: f.d ?? (it ? it.d : 2), rot: f.rot || 0 };
+  });
+  state.selection = null;
+  reseedIds();
+  unitsSelect.value = state.units; syncUnitsUI(); buildPalette();
+  gridToggle.checked = state.grid;
+  floorStyleSel.value = state.floorStyle;
+  wallColorInput.value = state.wallColor;
+  emit();
+  applyingHistory = false;
+}
+
+function undo() {
+  if (histIndex <= 0) { toast('Nothing to undo'); return; }
+  histIndex--; applySnapshot(history[histIndex]); autosave();
+}
+function redo() {
+  if (histIndex >= history.length - 1) { toast('Nothing to redo'); return; }
+  histIndex++; applySnapshot(history[histIndex]); autosave();
+}
+
+function autosave() {
+  try {
+    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(buildProjectData()));
+  } catch {
+    // Quota exceeded (usually the embedded image) — keep geometry, drop image.
+    try {
+      const d = buildProjectData();
+      d.image = state.image ? { w: state.image.w, h: state.image.h } : null;
+      localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(d));
+    } catch { /* give up silently */ }
+  }
+}
+
+// After edits settle, record ONE history entry + autosave. Debouncing coalesces
+// a drag (many emits) into a single undo step.
+function commit() {
+  const snap = editableSnapshot();
+  if (histIndex < 0 || history[histIndex] !== snap) {
+    history = history.slice(0, histIndex + 1);
+    history.push(snap);
+    if (history.length > HISTORY_MAX) history.shift();
+    histIndex = history.length - 1;
+  }
+  autosave();
+}
+
+subscribe(() => {
+  if (applyingHistory) return;
+  clearTimeout(commitTimer);
+  commitTimer = setTimeout(commit, 300);
+});
+
+function loadAutosave() {
+  let raw;
+  try { raw = localStorage.getItem(AUTOSAVE_KEY); } catch { return false; }
+  if (!raw) return false;
+  let data;
+  try { data = JSON.parse(raw); } catch { return false; }
+  const hasContent = data && (Array.isArray(data.walls) && data.walls.length || (data.furniture || []).length || data.image);
+  if (!hasContent) return false;
+  applyProject(data, 'Restored your last session.');
+  return true;
+}
+
+const undoBtn = document.getElementById('undo-btn');
+const redoBtn = document.getElementById('redo-btn');
+undoBtn.addEventListener('click', undo);
+redoBtn.addEventListener('click', redo);
 
 // --- Advanced dropdown ---
 const advBtn = document.getElementById('advanced-btn');
@@ -263,9 +394,9 @@ function runDetectWalls() {
   setTimeout(() => {
     let walls = [];
     try { walls = detectWalls(state.image.el); }
-    catch (err) { console.error(err); toast('Wall detection failed — trace manually with the Wall tool.', 4000); return; }
+    catch (err) { console.error(err); toast('Wall detection failed. Trace manually with the Wall tool.', 4000); return; }
     if (!walls.length) {
-      toast('Couldn’t auto-detect walls on this plan — trace them manually with the Wall tool.', 4500);
+      toast('Couldn’t auto-detect walls on this plan. Trace them manually with the Wall tool.', 4500);
       return;
     }
     replaceWalls(walls);
@@ -281,7 +412,7 @@ function runDetectWalls() {
 function runDetectOpenings() {
   if (!state.image?.el) { toast('Upload a floor plan first.'); return; }
   if (state.walls.length < 2) {
-    toast('Detect or draw walls first — doors & windows sit in the gaps between them.', 4500);
+    toast('Detect or draw walls first. Doors & windows sit in the gaps between them.', 4500);
     return;
   }
   toast('Detecting doors & windows…');
@@ -289,9 +420,9 @@ function runDetectOpenings() {
     const pxPerFt = state.scale ?? PX_PER_FT_FALLBACK;
     let items = [];
     try { items = detectOpenings(state.image.el, state.walls, { pxPerFt }); }
-    catch (err) { console.error(err); toast('Detection failed — place doors/windows manually.', 4000); return; }
+    catch (err) { console.error(err); toast('Detection failed. Place doors/windows manually.', 4000); return; }
     if (!items.length) {
-      toast('No doors or windows detected — add them with the Door/Window tools.', 4500);
+      toast('No doors or windows detected. Add them with the Door/Window tools.', 4500);
       return;
     }
     setDetectedOpenings(items);
@@ -306,6 +437,20 @@ function runDetectOpenings() {
 const opacitySlider = document.getElementById('opacity');
 opacitySlider.addEventListener('input', () => {
   state.imageOpacity = parseInt(opacitySlider.value, 10) / 100;
+  emit();
+});
+
+// Floor material + wall colour (whole-home 3D styling)
+const floorStyleSel = document.getElementById('floor-style');
+const wallColorInput = document.getElementById('wall-color');
+floorStyleSel.addEventListener('change', () => { state.floorStyle = floorStyleSel.value; emit(); });
+wallColorInput.addEventListener('input', () => { state.wallColor = wallColorInput.value; emit(); });
+
+// Snap-to-grid toggle (1-ft build grid)
+const gridToggle = document.getElementById('grid-mode');
+gridToggle.addEventListener('change', () => {
+  state.grid = gridToggle.checked;
+  if (state.grid && !state.scale) setScale(24);
   emit();
 });
 
@@ -407,7 +552,7 @@ window.addEventListener('fpd:wallScale', (e) => {
 window.addEventListener('fpd:scalePicked', (e) => {
   pendingScalePxDist = e.detail.pxDist;
   if (!pendingScalePxDist || pendingScalePxDist < 2) {
-    toast('Those points are too close together — try again.');
+    toast('Those points are too close together. Try again.');
     state.scalePick = null;
     emit();
     return;
@@ -587,7 +732,7 @@ function updateScaleInfo() {
     state.scale ? `${scalePer.toFixed(1)} ${perUnit}` : 'not set';
   const fp = computeFootprintFt();
   document.getElementById('ro-foot').textContent =
-    fp ? `${formatLength(fp.w, u)} × ${formatLength(fp.h, u)}` : '—';
+    fp ? `${formatLength(fp.w, u)} × ${formatLength(fp.h, u)}` : '–';
 
   const roArea = document.getElementById('ro-area');
   const poly = computeFloorAreaSqft();
@@ -596,7 +741,7 @@ function updateScaleInfo() {
   } else if (fp && state.walls.length >= 3) {
     roArea.textContent = `~${formatArea(fp.w * fp.h, u)}`;
   } else {
-    roArea.textContent = state.scale ? 'trace a closed room' : '—';
+    roArea.textContent = state.scale ? 'trace a closed room' : '–';
   }
 }
 
@@ -605,7 +750,7 @@ function updateScaleInfo() {
 function reportAreaIfPossible() {
   const area = computeFloorAreaSqft();
   if (area) {
-    toast(`Floor area ≈ ${formatArea(area, state.units)} — compare to the listing to verify.`, 4000);
+    toast(`Floor area ≈ ${formatArea(area, state.units)}. Compare to the listing to verify.`, 4000);
   }
 }
 
@@ -622,8 +767,12 @@ function toast(msg, ms = 2400) {
 // --- Keyboard shortcuts ---
 window.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-  if (!modal.hidden) return;
   const k = e.key.toLowerCase();
+  // Undo / redo (Ctrl/Cmd+Z, Shift+Z or Ctrl+Y to redo).
+  if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); redo(); return; }
+  if (e.ctrlKey || e.metaKey) return; // don't fire tool shortcuts with a modifier held
+  if (!modal.hidden) return;
   // 'r' rotates furniture (when placing or a furniture item is selected) in any
   // view; otherwise it's the window-tool shortcut.
   const rIsRotate = state.tool === 'furniture' || state.selection?.kind === 'furniture';
@@ -661,6 +810,29 @@ itemPanel.addEventListener('click', (e) => {
   else if (act === 'd+') nudgeFurniture('d', 1);
   else if (act === 'h-') nudgeHeight(-1);
   else if (act === 'h+') nudgeHeight(1);
+  else if (act === 'wall-reset') setSelectedWallColor(null);
+});
+
+// Per-wall colour: set on the selected wall (null clears it → uses the global colour).
+const ipWallColor = document.getElementById('ip-wall-color');
+ipWallColor.addEventListener('input', () => setSelectedWallColor(ipWallColor.value));
+function setSelectedWallColor(color) {
+  if (state.selection?.kind !== 'wall') return;
+  const w = state.walls.find(x => x.id === state.selection.id);
+  if (!w) return;
+  if (color) w.color = color; else delete w.color;
+  emit();
+}
+
+// Per-room floor: store an override at the selected room's interior point.
+const ipRoomFloor = document.getElementById('ip-room-floor');
+ipRoomFloor.addEventListener('change', () => {
+  const sel = state.selection;
+  if (sel?.kind !== 'room') return;
+  state.roomFloors = (state.roomFloors || []).filter(o => `${Math.round(o.x)},${Math.round(o.y)}` !== sel.key);
+  state.roomFloors.push({ x: sel.x, y: sel.y, style: ipRoomFloor.value });
+  sel.style = ipRoomFloor.value; // keep the panel in sync
+  emit();
 });
 
 // Raise/lower a wall-mounted item (its mount height off the floor), 3" per step.
@@ -698,6 +870,30 @@ function updateItemPanel() {
   const sel = state.selection;
   const sizeRow = document.getElementById('ip-size');
   const rotateBtn = itemPanel.querySelector('[data-act="rotate"]');
+  const wallRow = document.getElementById('ip-wall');
+  const roomRow = document.getElementById('ip-room');
+  const deleteBtn = itemPanel.querySelector('[data-act="delete"]');
+  wallRow.hidden = sel?.kind !== 'wall';
+  roomRow.hidden = sel?.kind !== 'room';
+  deleteBtn.style.display = sel?.kind === 'room' ? 'none' : ''; // rooms aren't deletable
+  if (sel?.kind === 'wall') {
+    const w = state.walls.find(x => x.id === sel.id);
+    if (!w) { itemPanel.hidden = true; return; }
+    itemPanel.hidden = false;
+    document.getElementById('ip-title').textContent = 'Wall';
+    sizeRow.style.display = 'none';
+    rotateBtn.style.display = 'none';
+    document.getElementById('ip-wall-color').value = w.color || state.wallColor || '#e9e6df';
+    return;
+  }
+  if (sel?.kind === 'room') {
+    itemPanel.hidden = false;
+    document.getElementById('ip-title').textContent = 'Room floor';
+    sizeRow.style.display = 'none';
+    rotateBtn.style.display = 'none';
+    document.getElementById('ip-room-floor').value = sel.style || state.floorStyle;
+    return;
+  }
   if (sel?.kind === 'furniture') {
     const f = state.furniture.find(x => x.id === sel.id);
     const item = f && getItem(f.type);
@@ -743,4 +939,4 @@ function rotateFurniture90() {
 unitsSelect.value = state.units;
 syncUnitsUI();
 view2d.init();
-emit();
+if (!loadAutosave()) emit(); // restore last session, else start fresh

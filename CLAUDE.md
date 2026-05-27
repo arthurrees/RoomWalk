@@ -1,8 +1,9 @@
 # RoomWalk
 
-Browser-based floor plan designer. Upload a 2D apartment floor plan, trace walls
-over it, place doors/windows and to-scale furniture, then view/walk the result
-in 3D. "Sims-like" sandbox feel, not a wireframe tool.
+Browser-based floor plan designer. Upload a 2D apartment floor plan (or build
+from scratch on a grid), trace/auto-detect walls and doors/windows, place
+to-scale furniture and wall-mounted items, style floors & walls, then view/walk
+the result in 3D. "Sims-like" sandbox feel, not a wireframe tool.
 
 ## Running it
 
@@ -27,21 +28,22 @@ Hard-reload (Ctrl+Shift+R) after edits to bypass cache.
 
 ## Architecture
 
-Vanilla JS, ES modules, three.js loaded from a CDN import map in `index.html`.
-Central state with a tiny pub/sub; the 2D and 3D views both subscribe and
-re-render on `emit()`.
+Vanilla JS, ES modules, three.js **vendored** under `vendor/three/` (no CDN),
+wired via the import map in `index.html`. Central state with a tiny pub/sub; the
+2D and 3D views both subscribe and re-render on `emit()`.
 
 | File | Responsibility |
 |------|----------------|
-| `index.html` | Layout: top bar, toolbar, Advanced dropdown, palette, readout/selection panels, three.js import map |
+| `index.html` | Layout: top bar, toolbar, sectioned Advanced dropdown, How-to guide, palette, readout/selection panels, three.js import map |
 | `styles.css` | ThinkPad-inspired theme (see Theme below) |
-| `state.js` | Central `state` object + `subscribe`/`emit`; mutators (addWall, addOpening, addFurniture, setScale, etc.); `reseedIds()` after load |
-| `geom.js` | Pure geometry helpers; unit format/parse (`formatLength`, `formatArea`, `parseLength`); SAT OBB overlap (`obbOverlapMTV`); shared constants |
-| `furniture.js` | Dependency-free catalog (real dims in feet) + resize behavior metadata + `unitCount`/`applyResize`/`sizeNote` |
-| `collision.js` | Furniture↔wall / furniture↔furniture overlap; `resolveAgainstWalls`, `isClipping`, `recomputeClips` |
-| `view2d.js` | 2D canvas: image/outline, pan/zoom, wall draw, openings, furniture, scale pick. Renders on `subscribe(draw)` |
-| `view3d.js` | three.js scene: segmented walls, openings, furniture proxies, OrbitControls, click-drag walk mode, 3D placement |
-| `app.js` | Wires DOM/UI to state and views; calibration modals; save/open; keyboard shortcuts |
+| `state.js` | Central `state` object + `subscribe`/`emit`; mutators (addWall, addOpening, addFurniture, setScale, replaceWalls, setDetectedOpenings, etc.); `reseedIds()` after load |
+| `geom.js` | Pure geometry helpers; unit format/parse; SAT OBB overlap (`obbOverlapMTV`); gap detection (`findGap`); shared constants |
+| `furniture.js` | Dependency-free catalog (real dims in feet) incl. wall-mounted items (`mount:'wall'`, `mountH`) + resize metadata + `unitCount`/`applyResize`/`sizeNote` |
+| `detect.js` | Dependency-free CV: `detectWalls` (threshold → thick-band extraction) and `detectOpenings` (gap classification: light-glass ⇒ window, narrow empty ⇒ door) |
+| `collision.js` | Furniture↔wall overlap (`resolveAgainstWalls`), gap auto-fit (`fitBetweenWalls`), wall-item snapping (`snapToWall`/`wallSnapPose`), `isClipping`/`recomputeClips` |
+| `view2d.js` | 2D canvas: image/outline, world grid, pan/zoom, wall draw + snap, openings, furniture, scale pick. Renders on `subscribe(draw)` |
+| `view3d.js` | three.js scene: segmented walls (selectable), per-room flood-filled floors, openings, furniture proxies, wall-item mounting, OrbitControls, click-drag walk, 3D placement/picking |
+| `app.js` | Wires DOM/UI to state and views; calibration modals; save/open; **autosave + undo/redo**; detection + start-from-scratch; keyboard shortcuts |
 
 ### Coordinate model
 - All geometry (walls, openings, furniture) is stored in **image-pixel
@@ -59,9 +61,25 @@ re-render on `emit()`.
   white bg → transparent. Toggle + detail (threshold) + opacity in Advanced.
 - **Wall tracing.** Click two points; endpoint snap + horizontal/vertical axis
   snap. Walls render as bright accent strokes.
+- **Auto-detect walls** (`Advanced → Detect walls`, `detect.js`). Threshold the
+  image, keep only *thick long* strokes (rejects text/dimension lines via a
+  min-band-thickness test), extract axis-aligned centerlines → `replaceWalls`.
+  Tuned for solid-wall plans; thin double-line plans degrade to manual tracing.
+- **Build from scratch.** `Start from scratch` (top bar) → a blank 1-ft world
+  grid (`state.grid`); walls snap to it and scale is pre-set so dimensions are
+  real-by-construction. Lets students with only a 3D/listing render rebuild a
+  clean plan. Toggle via `Advanced → Canvas → Snap to grid`.
 - **Doors / windows.** Place tool snaps to walls; select to move (middle) or
   resize (end-thirds). 3D walls are *segmented* around openings (geometry
   preserved, not transparent); doors brown, windows blue glass.
+- **Gap-bridging openings.** Hover a door/window over an open gap between two
+  collinear wall ends → it auto-fits, creating a short `bridge:true` wall it
+  fills (deleting the opening reopens the gap).
+- **Auto-detect doors & windows** (`Advanced → Detect doors & windows`). Gaps in
+  the detected walls are candidate openings: a light-ink glass line spanning a
+  gap ⇒ window (glass is often drawn lighter than walls, so a 2nd sensitive
+  threshold catches it); a narrow empty gap ⇒ door; a wide empty gap ⇒ left open.
+  Idempotent (re-running replaces prior auto openings, tagged `auto:true`).
 - **Scale calibration** (all converge on px/ft):
   1. **Set scale from a dimension** — click two points on the plan, type the real
      length. Clicks snap to the nearest drawn line; also axis-snap.
@@ -114,9 +132,29 @@ re-render on `emit()`.
   and a red wireframe box (3D). After dropping, the tool auto-switches to the
   Pan cursor with the new item selected. (Pan is the single all-purpose cursor —
   pan / select / move / resize; there is no separate Select tool.)
-- **Save / Open.** Save downloads a self-contained `.json` (walls, openings,
-  furniture, scale, units, settings, AND the floor-plan image embedded as a data
-  URL). Open restores everything and reseeds ids.
+- **Wall-mounted items** (`mount:'wall'`, `mountH`): wall cabinet, floating
+  shelf, wall TV, medicine cabinet, mirror, range hood (the **Wall** palette
+  group). Snap flush to the nearest wall on its *interior* side, render lifted to
+  a mount height (adjustable via the panel **Height ±**), and **pass through**
+  floor-furniture and walk collision (they sit up out of the way). 2D shows them
+  with a dashed teal outline.
+- **Styling.** Floor material presets (wood/tile/carpet/concrete) + global wall
+  colour (`Advanced → Style`); **per-wall** colour (select a wall in 2D *or* 3D);
+  **per-room floors** — `view3d` flood-fills the wall-bounded space (walls incl.
+  door spans are barriers), greedy-meshes each room's floor, and you click a
+  room's floor in 3D to set its material. Approximated with colour + roughness
+  (no image textures). Per-room overrides are keyed by an interior point so they
+  survive edits; room detection is cached by walls+overrides.
+- **Drag collision.** Furniture stops at walls *during* a drag (resolve runs each
+  frame, not just on release), in 2D and 3D/Walk.
+- **Undo / redo + autosave.** Debounced history (`Ctrl+Z` / `Ctrl+Shift+Z` or the
+  ↶ ↷ buttons; a drag coalesces into one step). Autosaves to `localStorage` and
+  restores the last session on load; falls back to geometry-only if the embedded
+  image exceeds the storage quota.
+- **Save / Open.** Save downloads a self-contained `.json` (walls incl. per-wall
+  colour, openings, furniture incl. `mountH`, scale, units, grid, floor/wall
+  style, per-room floors, AND the floor-plan image as a data URL). Open restores
+  everything and reseeds ids.
 
 ## Theme
 
@@ -137,16 +175,21 @@ live in the `PAL` object at the top of `view2d.js`; UI colors in CSS `:root`.
 
 ## Roadmap
 
-1. Adaptive resize — **done**
-2. Direct 3D/Walk manipulation (drag handles, openings editable in 3D) — **done**
-3. More item detail — **fixtures done** (sinks/tub/toilet/stove/fridge); still
-   plain: dresser, wardrobe, TV stand, shower stall
-4. Light "feel" pass (materials, lighting, optional ceiling/baseboards) — next
-5. OCR auto-reading of printed dimension labels
+Done: adaptive resize · direct 3D/Walk manipulation · auto-detect walls &
+doors/windows · gap-bridging · build-from-scratch grid · wall-mounted items ·
+floor/wall/per-wall/per-room styling · edge-anchored resize · drag collision ·
+undo/redo + autosave.
 
-Deferred: importing external glTF/OBJ model files (chose catalog box-proxies for
-now). Possible: autosave to localStorage; moving items in walk via arrow nudge;
-optional bed snap-to-standard toggle.
+Next / ideas:
+1. Richer materials (procedural wood grain / tile lines, optional ceiling &
+   baseboards) — the box-proxy look is still flat.
+2. Touch / mobile support (currently mouse-only) — separate effort.
+3. More item detail (dresser, wardrobe, TV stand, shower stall still plain).
+4. OCR auto-reading of printed dimension labels for auto-calibration.
+5. Pick walls/rooms in 3D is done; per-room *wall* colour and numeric room entry
+   ("add a 12×10 room") would round out reconstruction.
+
+Deferred: importing external glTF/OBJ model files (chose catalog box-proxies).
 
 ## Deploy status
 
@@ -156,8 +199,14 @@ Push to `main` → auto-deploy. Cloudflare Web Analytics available on the projec
 
 ## Example floor plans
 
-Test images live in the sibling project at
-`../floor-plan-designer/example floorplans/` (316 Gunson, 609 Grand River, 513
-Hillcrest, 920 Ann, Chalet, Lodges). Most print dimensions (5/6); only 2/6 state
-sq ft; doors are consistently 3'-0" — which is why dimension-line calibration is
-primary and a 36" door is the standards fallback.
+Top-down test images live in `example floorplans/` (316 Gunson, 609 Grand River,
+513 Hillcrest, 920 Ann, Chalet, Lodges). Most print dimensions; doors are
+consistently 3'-0" — which is why dimension-line calibration is primary and a 36"
+door is the standards fallback. 316 Gunson (solid thick walls) is the auto-detect
+happy path; Lodges (thin double-line walls) is the graceful-fallback case.
+
+`example floorplans/new floorplans/` holds the *hard* real-world cases students
+actually find: 3D dollhouse / isometric renders (Cedar Village, Red Cedar Flats)
+that **can't** be traced top-down, plus a colored top-down plan (`slide.jpg`).
+The renders are why **Build from scratch** exists — you can't auto-detect a
+perspective image, so you rebuild on the grid using it as a visual reference.

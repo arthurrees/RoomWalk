@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>RoomWalk — design &amp; walk your floor plan</title>
+<title>RoomWalk · design &amp; walk your floor plan</title>
 <link rel="stylesheet" href="styles.css" />
 <script type="importmap">
 {
@@ -22,23 +22,27 @@
         <button id="help-btn" class="ghost">How to use ▾</button>
         <div class="dropdown-menu help-menu" id="help-menu" hidden>
           <div class="help-section">
-            <h4><span class="step">1 ·</span> Upload your plan</h4>
-            <p>Click <b>Upload floor plan</b> (top right) and pick an image of your floor plan. It appears as a clean blueprint outline you can trace over.</p>
+            <h4><span class="step">1 ·</span> Start your plan</h4>
+            <p>Two ways in:</p>
+            <ul>
+              <li><b>Upload floor plan</b> (top right) to trace over an image. It appears as a clean blueprint outline.</li>
+              <li><b>Start from scratch</b> to draw on a blank 1-ft grid. Great when all you have is a 3D/listing render: keep it open for reference and rebuild the layout on the grid.</li>
+            </ul>
           </div>
           <div class="help-section">
             <h4><span class="step">2 ·</span> Add your walls</h4>
-            <p>Two ways — try the automatic one first:</p>
+            <p>Two ways. Try the automatic one first:</p>
             <ul>
-              <li><b>Detect walls (automatic)</b> — open <b>Advanced ▾</b> and click <b>Detect walls</b>. It traces the walls straight off your plan in one click. Works best on plans drawn with solid black walls.</li>
-              <li><b>Draw them yourself</b> — pick the <b>Wall</b> tool and click two points per wall (a start, then an end). Ends snap together and to straight horizontal/vertical lines. Perfect for touching up the auto-detect, or for plans it can't read.</li>
+              <li><b>Detect walls (automatic)</b>: open <b>Advanced ▾</b> and click <b>Detect walls</b>. It traces the walls straight off your plan in one click. Works best on plans drawn with solid black walls.</li>
+              <li><b>Draw them yourself</b>: pick the <b>Wall</b> tool and click two points per wall (a start, then an end). Ends snap together and to straight horizontal/vertical lines. Perfect for touching up the auto-detect, or for plans it can't read.</li>
             </ul>
             <p>Want to start over? <b>Advanced ▾ → Clear walls</b>. Your walls become the 3D room.</p>
           </div>
           <div class="help-section">
             <h4><span class="step">3 ·</span> Set the scale</h4>
-            <p>Calibrate once so everything is life-size — open <b>Advanced ▾</b> and use any of:</p>
+            <p>Calibrate once so everything is life-size. Open <b>Advanced ▾</b> and use any of:</p>
             <ul>
-              <li><b>Set scale from a dimension</b> — click the two ends of a measurement printed on the plan (e.g. 24'-6"), then type it. Tip: use the longest dimension for best accuracy.</li>
+              <li><b>Set scale from a dimension</b>: click the two ends of a measurement printed on the plan (e.g. 24'-6"), then type it. Tip: use the longest dimension for best accuracy.</li>
               <li>Or click a <b>wall you've drawn</b> and enter its real length.</li>
               <li>Or <b>Calibrate by area</b> using the listing's square footage.</li>
             </ul>
@@ -46,40 +50,50 @@
           </div>
           <div class="help-section">
             <h4><span class="step">4 ·</span> Doors &amp; windows</h4>
-            <p>Two ways — try the automatic one first:</p>
+            <p>Two ways. Try the automatic one first:</p>
             <ul>
-              <li><b>Detect doors &amp; windows (automatic)</b> — once your walls are in, open <b>Advanced ▾</b> and click <b>Detect doors &amp; windows</b>. It finds doorways and windows in the wall gaps. Works best on solid-wall plans; review and tidy up afterward.</li>
-              <li><b>Place them yourself</b> — choose <b>Door</b> or <b>Window</b>, then click on a wall to drop it. Or, if you left an open gap where a doorway goes, hover over the gap and it auto-fits a door/window to fill it.</li>
-              <li><b>Adjust</b> — with the <b>Pan</b> cursor, click one to select, then drag the middle to move it, drag an end to resize, or press <kbd>Delete</kbd> to remove.</li>
+              <li><b>Detect doors &amp; windows (automatic)</b>: once your walls are in, open <b>Advanced ▾</b> and click <b>Detect doors &amp; windows</b>. It finds doorways and windows in the wall gaps. Works best on solid-wall plans; review and tidy up afterward.</li>
+              <li><b>Place them yourself</b>: choose <b>Door</b> or <b>Window</b>, then click on a wall to drop it. Or, if you left an open gap where a doorway goes, hover over the gap and it auto-fits a door/window to fill it.</li>
+              <li><b>Adjust</b>: with the <b>Pan</b> cursor, click one to select, then drag the middle to move it, drag an end to resize, or press <kbd>Delete</kbd> to remove.</li>
             </ul>
           </div>
           <div class="help-section">
             <h4><span class="step">5 ·</span> Furniture &amp; fixtures</h4>
             <p>Click <b>Items</b>, choose a piece, then click on the plan to drop it. It auto-fits tight gaps and is selected right away.</p>
             <ul>
-              <li>Drag to move; drag the red handles or use the panel to resize.</li>
+              <li>Drag to move; drag the red handles or use the panel to resize. Items stop at walls instead of passing through.</li>
               <li><kbd>R</kbd> rotates · <kbd>Delete</kbd> removes.</li>
-              <li>A red ⚠ means it overlaps a wall or another item — nudge it clear.</li>
+              <li>A red ⚠ means it overlaps a wall or another item, so nudge it clear.</li>
+              <li><b>Wall-mounted items</b> (the <b>Wall</b> group: cabinets, shelves, TV, mirror) snap onto a wall at a height. Drag to slide them along the wall; use <b>Height −/+</b> in the panel to raise or lower.</li>
             </ul>
           </div>
           <div class="help-section">
-            <h4><span class="step">6 ·</span> Deleting things</h4>
-            <p>With the <b>Pan</b> cursor, click any wall, door, window, or furniture piece to select it, then press <kbd>Delete</kbd> (or <kbd>Backspace</kbd>) to remove it — works in 2D, 3D, and Walk.</p>
+            <h4><span class="step">6 ·</span> Style it</h4>
             <ul>
-              <li>Deleting a <b>door or window placed across a gap</b> reopens the gap — it won't leave a solid wall behind.</li>
+              <li><b>Whole home</b>: under <b>Advanced ▾ → Style</b>, pick a floor material (wood / tile / carpet / concrete) and a wall colour.</li>
+              <li><b>One wall</b>: click a wall (in 2D or 3D) and set just its colour in the panel.</li>
+              <li><b>One room</b>: in <b>3D</b>, click a room's floor and choose its material, so rooms can differ (tile bathroom, wood living room).</li>
+            </ul>
+          </div>
+          <div class="help-section">
+            <h4><span class="step">7 ·</span> Deleting things</h4>
+            <p>With the <b>Pan</b> cursor, click any wall, door, window, or furniture piece to select it, then press <kbd>Delete</kbd> (or <kbd>Backspace</kbd>) to remove it. Works in 2D, 3D, and Walk.</p>
+            <ul>
+              <li>Deleting a <b>door or window placed across a gap</b> reopens the gap, so it won't leave a solid wall behind.</li>
               <li>To clear a whole category at once, use <b>Advanced ▾ → Clear walls / Clear doors/windows / Clear furniture</b>.</li>
             </ul>
           </div>
           <div class="help-section">
-            <h4><span class="step">7 ·</span> View in 3D &amp; Walk</h4>
+            <h4><span class="step">8 ·</span> View in 3D &amp; Walk</h4>
             <ul>
-              <li><b>3D</b> — drag to orbit, scroll to zoom. You can place &amp; move items here too.</li>
-              <li><b>Walk</b> — click-drag to look, <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows to move, <kbd>Q</kbd>/<kbd>E</kbd> to turn. You're 5'9" tall and walls/furniture are solid.</li>
+              <li><b>3D</b>: drag to orbit, scroll to zoom. You can place &amp; move items here too.</li>
+              <li><b>Walk</b>: click-drag to look, <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows to move, <kbd>Q</kbd>/<kbd>E</kbd> to turn. You're 5'9" tall and walls/furniture are solid.</li>
             </ul>
           </div>
           <div class="help-section">
-            <h4><span class="step">8 ·</span> Save your work</h4>
-            <p><b>Save</b> downloads your whole project (plan + walls + everything) as one file. <b>Open</b> loads it back later to continue where you left off.</p>
+            <h4><span class="step">9 ·</span> Save &amp; undo</h4>
+            <p>Your work <b>autosaves</b> in this browser and reloads automatically next time. Made a mistake? <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> to redo (or the ↶ ↷ buttons).</p>
+            <p><b>Save</b> downloads your whole project (plan + walls + everything) as one file; <b>Open</b> loads it back later or on another computer.</p>
           </div>
         </div>
       </div>
@@ -94,12 +108,28 @@
         Upload floor plan
         <input type="file" id="file-input" accept="image/*" hidden />
       </label>
-      <button id="open-btn" class="ghost">Open</button>
-      <button id="save-btn" class="ghost">Save</button>
+      <button id="scratch-btn" class="ghost">Start from scratch</button>
+      <span class="topbar-sep"></span>
+      <span class="btn-group">
+        <button id="undo-btn" class="ghost icon-btn" title="Undo (Ctrl+Z)">↶</button>
+        <button id="redo-btn" class="ghost icon-btn" title="Redo (Ctrl+Shift+Z)">↷</button>
+      </span>
+      <span class="btn-group">
+        <button id="open-btn" class="ghost">Open</button>
+        <button id="save-btn" class="ghost">Save</button>
+      </span>
       <input type="file" id="open-input" accept=".json,application/json" hidden />
       <div class="dropdown">
         <button id="advanced-btn" class="ghost">Advanced ▾</button>
         <div class="dropdown-menu" id="advanced-menu" hidden>
+          <div class="menu-sec">Detect</div>
+          <button data-action="detect-walls">Detect walls (beta)</button>
+          <button data-action="detect-openings">Detect doors &amp; windows (beta)</button>
+
+          <div class="menu-sec">Scale &amp; units</div>
+          <button data-action="set-scale">Set scale from a dimension…</button>
+          <button data-action="calibrate-sqft">Calibrate by square footage…</button>
+          <button data-action="calibrate-distance">Calibrate by selected wall…</button>
           <label class="row">
             <span>Units</span>
             <select id="units-select">
@@ -107,11 +137,31 @@
               <option value="metric">Meters</option>
             </select>
           </label>
-          <button data-action="set-scale">Set scale from a dimension…</button>
-          <button data-action="calibrate-sqft">Calibrate by square footage…</button>
-          <button data-action="calibrate-distance">Calibrate by selected wall…</button>
-          <button data-action="detect-walls">Detect walls (beta)</button>
-          <button data-action="detect-openings">Detect doors &amp; windows (beta)</button>
+          <label class="row">
+            <span id="wall-height-label">Wall height (ft)</span>
+            <input type="number" id="wall-height" min="6" max="14" step="0.5" value="9" />
+          </label>
+
+          <div class="menu-sec">Style</div>
+          <label class="row">
+            <span>Floor</span>
+            <select id="floor-style">
+              <option value="wood">Wood</option>
+              <option value="tile">Tile</option>
+              <option value="carpet">Carpet</option>
+              <option value="concrete">Concrete</option>
+            </select>
+          </label>
+          <label class="row">
+            <span>Wall colour</span>
+            <input type="color" id="wall-color" value="#e9e6df" />
+          </label>
+
+          <div class="menu-sec">Canvas</div>
+          <label class="row">
+            <span>Snap to grid (1 ft)</span>
+            <input type="checkbox" id="grid-mode" />
+          </label>
           <label class="row">
             <span>Blueprint outline</span>
             <input type="checkbox" id="outline-mode" checked />
@@ -124,10 +174,8 @@
             <span>Plan opacity</span>
             <input type="range" id="opacity" min="0" max="100" value="85" />
           </label>
-          <label class="row">
-            <span id="wall-height-label">Wall height (ft)</span>
-            <input type="number" id="wall-height" min="6" max="14" step="0.5" value="9" />
-          </label>
+
+          <div class="menu-sec">Clear</div>
           <button data-action="clear-walls">Clear walls</button>
           <button data-action="clear-openings">Clear doors/windows</button>
           <button data-action="clear-furniture">Clear furniture</button>
@@ -141,7 +189,7 @@
     <button class="tool active" data-tool="pan" title="Pan, select, move &amp; resize (V)">
       <span class="ico">✥</span><span>Pan</span><span class="key">V</span>
     </button>
-    <button class="tool" data-tool="wall" title="Draw wall — click two points (W)">
+    <button class="tool" data-tool="wall" title="Draw wall: click two points (W)">
       <span class="ico">▱</span><span>Wall</span><span class="key">W</span>
     </button>
     <button class="tool" data-tool="door" title="Place door on wall (D)">
@@ -163,13 +211,20 @@
       <div class="palette-body" id="palette-body"></div>
     </div>
     <div class="readout" id="readout" hidden>
-      <div class="readout-row"><span>Scale</span><b id="ro-scale">—</b></div>
-      <div class="readout-row"><span>Footprint</span><b id="ro-foot">—</b></div>
-      <div class="readout-row readout-area"><span>Floor area</span><b id="ro-area">—</b></div>
+      <div class="readout-row"><span>Scale</span><b id="ro-scale">–</b></div>
+      <div class="readout-row"><span>Footprint</span><b id="ro-foot">–</b></div>
+      <div class="readout-row readout-area"><span>Floor area</span><b id="ro-area">–</b></div>
     </div>
     <div id="view-2d" class="view active">
       <canvas id="canvas2d"></canvas>
-      <div class="hint" id="hint-2d">Upload a floor plan to begin.</div>
+      <div class="hint welcome" id="hint-2d">
+        <div class="welcome-title">Design &amp; walk your space</div>
+        <div class="welcome-sub">Upload a floor plan to trace over, or start on a blank grid.</div>
+        <div class="welcome-actions">
+          <button id="welcome-upload" class="file-btn">Upload floor plan</button>
+          <button id="welcome-scratch" class="ghost">Start from scratch</button>
+        </div>
+      </div>
     </div>
     <div id="view-3d" class="view">
       <canvas id="canvas3d"></canvas>
@@ -180,17 +235,31 @@
       <div class="ip-title" id="ip-title">Item</div>
       <div class="ip-row" id="ip-size">
         <div class="ip-dim">
-          <button data-act="w-">−</button><span class="ip-val" id="ip-w">—</span><button data-act="w+">+</button>
+          <button data-act="w-">−</button><span class="ip-val" id="ip-w">–</span><button data-act="w+">+</button>
           <span class="ip-axis">W</span>
         </div>
         <div class="ip-dim">
-          <button data-act="d-">−</button><span class="ip-val" id="ip-d">—</span><button data-act="d+">+</button>
+          <button data-act="d-">−</button><span class="ip-val" id="ip-d">–</span><button data-act="d+">+</button>
           <span class="ip-axis">D</span>
         </div>
         <div class="ip-dim" id="ip-height" hidden>
-          <button data-act="h-">−</button><span class="ip-val" id="ip-h">—</span><button data-act="h+">+</button>
+          <button data-act="h-">−</button><span class="ip-val" id="ip-h">–</span><button data-act="h+">+</button>
           <span class="ip-axis">Height</span>
         </div>
+      </div>
+      <div class="ip-row" id="ip-wall" hidden>
+        <span class="ip-axis">Colour</span>
+        <input type="color" id="ip-wall-color" />
+        <button data-act="wall-reset" class="ghost">Reset</button>
+      </div>
+      <div class="ip-row" id="ip-room" hidden>
+        <span class="ip-axis">Floor</span>
+        <select id="ip-room-floor">
+          <option value="wood">Wood</option>
+          <option value="tile">Tile</option>
+          <option value="carpet">Carpet</option>
+          <option value="concrete">Concrete</option>
+        </select>
       </div>
       <div class="ip-actions">
         <button data-act="rotate">⟳ Rotate</button>

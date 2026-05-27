@@ -149,6 +149,14 @@ button.ghost {
 button.ghost:hover { background: var(--panel-2); }
 button.danger { color: var(--danger); }
 
+/* Top-bar grouping: segmented button pairs + a thin separator */
+.topbar-sep { width: 1px; align-self: stretch; background: var(--border); margin: 5px 0; }
+.btn-group { display: inline-flex; }
+.btn-group button.ghost { border-radius: 0; border-right-width: 0; }
+.btn-group button.ghost:first-child { border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
+.btn-group button.ghost:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px; border-right-width: 1px; }
+.icon-btn { padding: 7px 11px; font-size: 15px; line-height: 1; }
+
 .dropdown { position: relative; }
 .dropdown-menu {
   position: absolute;
@@ -196,6 +204,16 @@ button.danger { color: var(--danger); }
   font-size: 13px;
 }
 .dropdown-menu .row input[type="number"] { width: 70px; }
+.dropdown-menu .menu-sec {
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 8px 10px 3px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.dropdown-menu .menu-sec:first-child { border-top: none; margin-top: 0; padding-top: 4px; }
 
 .toolbar {
   background: var(--panel);
@@ -390,6 +408,22 @@ canvas { display: block; width: 100%; height: 100%; }
   color: var(--muted);
   pointer-events: none;
 }
+
+/* Centered welcome card for the empty first-run state */
+.hint.welcome {
+  bottom: auto; top: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--panel-2);
+  border-radius: 14px;
+  padding: 22px 26px;
+  text-align: center;
+  pointer-events: auto;
+  box-shadow: var(--shadow);
+  max-width: 360px;
+}
+.welcome-title { font-size: 17px; font-weight: 600; color: var(--text); }
+.welcome-sub { font-size: 13px; color: var(--muted); margin: 6px 0 16px; }
+.welcome-actions { display: flex; gap: 10px; justify-content: center; }
 
 .walk-hud {
   position: absolute;
