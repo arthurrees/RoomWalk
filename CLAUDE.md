@@ -6,7 +6,8 @@ in 3D. "Sims-like" sandbox feel, not a wireframe tool.
 
 ## Running it
 
-No build step. Static files served over HTTP (ES modules + three.js via CDN):
+No build step. Pure static files (ES modules). three.js is **vendored** under
+`vendor/three/` (no CDN dependency), wired via the import map in `index.html`.
 
 ```
 python -m http.server 5181
@@ -15,6 +16,14 @@ python -m http.server 5181
 
 (Port 5181 used during development; 5173 was taken by another process.)
 Hard-reload (Ctrl+Shift+R) after edits to bypass cache.
+
+### Hosting / deploy
+- Repo: `github.com/arthurrees/RoomWalk`. Hosted on **Cloudflare Pages** (connected
+  to the repo). Push to `main` → auto-deploy in ~30–60s. `wrangler.jsonc` is the
+  Cloudflare config (serves repo root as static assets).
+- `_headers` sets `Cache-Control: no-cache` on everything so returning visitors
+  always revalidate and never get a stale build (files have no version hash).
+- Usage analytics: enable Cloudflare Web Analytics on the Pages project.
 
 ## Architecture
 

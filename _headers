@@ -1,0 +1,6 @@
+# Cloudflare Pages headers.
+# Revalidate every request so visitors always get the latest build (the JS files
+# have stable names with no version hash). Cloudflare still serves 304s when
+# unchanged, so this stays fast while never going stale.
+/*
+  Cache-Control: no-cache
