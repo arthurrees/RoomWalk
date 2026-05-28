@@ -14,6 +14,9 @@ const canvas = document.getElementById('canvas3d');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; // richer, less blown-out look
+renderer.toneMappingExposure = 1.15;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x16171a);
@@ -31,10 +34,10 @@ orbit.dampingFactor = 0.1;
 orbit.minDistance = 5;
 orbit.maxDistance = 200;
 
-// Lights
-const hemi = new THREE.HemisphereLight(0xffffff, 0x404556, 0.75);
+// Lights — warm daylight: a warm sky / cool-warm ground fill plus a warm sun.
+const hemi = new THREE.HemisphereLight(0xfff3e0, 0x4a4640, 0.7);
 scene.add(hemi);
-const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+const sun = new THREE.DirectionalLight(0xfff0d6, 1.0);
 sun.position.set(40, 80, 30);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -49,6 +52,12 @@ const matWall = new THREE.MeshStandardMaterial({ color: 0xe9e6df, roughness: 0.8
 const matDoorJamb = new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 0.7 });
 const matWindow = new THREE.MeshStandardMaterial({
   color: 0x88c0ff, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.45,
+});
+const matBaseboard = new THREE.MeshStandardMaterial({ color: 0xf3f1ea, roughness: 0.6 });
+// Ceiling faces down (single-sided) so it's visible in Walk but culled when you
+// orbit from above, keeping the room open. A little emissive so it isn't murky.
+const matCeiling = new THREE.MeshStandardMaterial({
+  color: 0xf6f5f1, roughness: 0.95, emissive: 0x2b2a27, side: THREE.FrontSide,
 });
 
 const sceneRoot = new THREE.Group();
@@ -73,13 +82,97 @@ function px3(x, y) {
   return new THREE.Vector3(px2ft(x - _offset.x), 0, px2ft(y - _offset.y));
 }
 
-// Whole-home floor materials (approximated with colour + roughness, no textures).
+// Whole-home floor materials. Colour + roughness, plus a procedurally drawn
+// canvas texture (planks / grout / speckle) so floors read as real surfaces
+// without shipping any image files.
 const FLOOR_PRESETS = {
   wood:     { color: 0x9c6b40, rough: 0.70 },
   tile:     { color: 0xd0d3cd, rough: 0.35 },
   carpet:   { color: 0x9c9488, rough: 0.97 },
   concrete: { color: 0x8d8f92, rough: 0.90 },
 };
+const FLOOR_TEX_FT = 4; // world span one tile of the texture covers (for UV repeat)
+
+function makeFloorTexture(style) {
+  const S = 256, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  const base = '#' + (FLOOR_PRESETS[style] || FLOOR_PRESETS.wood).color.toString(16).padStart(6, '0');
+  g.fillStyle = base;
+  g.fillRect(0, 0, S, S);
+  const rnd = (n) => (Math.sin(n * 12.9898) * 43758.5453) % 1; // cheap deterministic noise
+  if (style === 'wood') {
+    const plankH = S / 8; // 8 planks across the 4ft span ≈ 6" planks
+    for (let i = 0; i < 8; i++) {
+      const y = i * plankH;
+      const shade = 1 + (rnd(i + 1) - 0.5) * 0.18; // per-plank tint
+      g.fillStyle = `rgba(${0x9c * shade | 0},${0x6b * shade | 0},${0x40 * shade | 0},1)`;
+      g.fillRect(0, y, S, plankH);
+      g.strokeStyle = 'rgba(40,24,12,0.55)'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(0, y); g.lineTo(S, y); g.stroke();
+      // a few grain streaks
+      g.strokeStyle = 'rgba(60,38,18,0.18)'; g.lineWidth = 1;
+      for (let k = 0; k < 5; k++) {
+        const gy = y + plankH * (0.2 + 0.6 * rnd(i * 7 + k));
+        g.beginPath(); g.moveTo(0, gy); g.lineTo(S, gy); g.stroke();
+      }
+      const seam = S * ((rnd(i * 3 + 2) + 1) % 1); // staggered end-joint
+      g.strokeStyle = 'rgba(40,24,12,0.4)';
+      g.beginPath(); g.moveTo(seam, y); g.lineTo(seam, y + plankH); g.stroke();
+    }
+  } else if (style === 'tile') {
+    const tile = S / 4; // 1ft tiles
+    g.strokeStyle = 'rgba(90,92,88,0.8)'; g.lineWidth = 4;
+    for (let i = 0; i <= 4; i++) {
+      g.beginPath(); g.moveTo(i * tile, 0); g.lineTo(i * tile, S); g.stroke();
+      g.beginPath(); g.moveTo(0, i * tile); g.lineTo(S, i * tile); g.stroke();
+    }
+    for (let i = 0; i < 16; i++) { // subtle per-tile tint
+      const tx = (i % 4) * tile, ty = (i / 4 | 0) * tile;
+      g.fillStyle = `rgba(255,255,255,${0.04 + 0.05 * rnd(i + 3)})`;
+      g.fillRect(tx + 2, ty + 2, tile - 4, tile - 4);
+    }
+  } else if (style === 'carpet') {
+    for (let i = 0; i < 9000; i++) { // dense fine speckle = carpet pile
+      const x = (rnd(i + 1) + 1) % 1 * S, y = (rnd(i + 99) + 1) % 1 * S;
+      const d = (rnd(i + 7) - 0.5) * 36;
+      g.fillStyle = `rgba(${0x9c + d | 0},${0x94 + d | 0},${0x88 + d | 0},0.5)`;
+      g.fillRect(x, y, 2, 2);
+    }
+  } else { // concrete: soft mottling + a faint crack
+    for (let i = 0; i < 80; i++) {
+      const x = (rnd(i + 1) + 1) % 1 * S, y = (rnd(i + 50) + 1) % 1 * S;
+      const r = 8 + 24 * ((rnd(i + 9) + 1) % 1), d = (rnd(i + 3) - 0.5) * 30;
+      g.fillStyle = `rgba(${0x8d + d | 0},${0x8f + d | 0},${0x92 + d | 0},0.5)`;
+      g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+    }
+    g.strokeStyle = 'rgba(60,62,64,0.4)'; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(S * 0.2, 0); g.lineTo(S * 0.35, S * 0.5); g.lineTo(S * 0.3, S); g.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+const floorTexCache = new Map();
+function floorTexture(style) {
+  let t = floorTexCache.get(style);
+  if (!t) { t = makeFloorTexture(style); floorTexCache.set(style, t); }
+  return t;
+}
+
+// Set a floor patch's UVs from its world rect so a single shared, repeating
+// texture tiles seamlessly across adjacent patches (1 texture unit = FLOOR_TEX_FT).
+function setFloorUVs(geo, cx, cz, ww, wd) {
+  const T = FLOOR_TEX_FT, uv = geo.attributes.uv;
+  // PlaneGeometry (1×1 seg) local verts: TL, TR, BL, BR. World x = cx + localX,
+  // world z = cz - localY.
+  const us = [(cx - ww / 2) / T, (cx + ww / 2) / T, (cx - ww / 2) / T, (cx + ww / 2) / T];
+  const vs = [(cz - wd / 2) / T, (cz - wd / 2) / T, (cz + wd / 2) / T, (cz + wd / 2) / T];
+  for (let i = 0; i < 4; i++) uv.setXY(i, us[i], vs[i]);
+  uv.needsUpdate = true;
+}
 
 // Apply the global wall colour to the shared wall material (floors use
 // floorMatFor per room / globally).
@@ -103,7 +196,10 @@ const floorMatCache = new Map();
 function floorMatFor(style) {
   const fp = FLOOR_PRESETS[style] || FLOOR_PRESETS.wood;
   let m = floorMatCache.get(style);
-  if (!m) { m = new THREE.MeshStandardMaterial({ color: fp.color, roughness: fp.rough }); floorMatCache.set(style, m); }
+  if (!m) {
+    m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: fp.rough, map: floorTexture(style) });
+    floorMatCache.set(style, m);
+  }
   return m;
 }
 
@@ -220,7 +316,9 @@ function addRoomFloors(rooms) {
   for (const room of rooms) {
     const mat = floorMatFor(room.style);
     for (const p of room.patches) {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(p.ww, p.wd), mat);
+      const geo = new THREE.PlaneGeometry(p.ww, p.wd);
+      setFloorUVs(geo, p.cx, p.cz, p.ww, p.wd);
+      const m = new THREE.Mesh(geo, mat);
       m.rotation.x = -Math.PI / 2;
       m.position.set(p.cx, 0, p.cz);
       m.receiveShadow = true;
@@ -253,7 +351,9 @@ export function rebuild() {
     } else {
       // No enclosed rooms detected — one floor at the global material.
       const floorW = px2ft(bb.w) + 8, floorH = px2ft(bb.h) + 8;
-      const floor = new THREE.Mesh(new THREE.PlaneGeometry(floorW, floorH), floorMatFor(state.floorStyle));
+      const geo = new THREE.PlaneGeometry(floorW, floorH);
+      setFloorUVs(geo, 0, 0, floorW, floorH);
+      const floor = new THREE.Mesh(geo, floorMatFor(state.floorStyle));
       floor.rotation.x = -Math.PI / 2;
       floor.receiveShadow = true;
       sceneRoot.add(floor);
@@ -266,6 +366,14 @@ export function rebuild() {
     grid.material.opacity = 0.18;
     grid.position.y = 0.01;
     sceneRoot.add(grid);
+
+    // Ceiling: a downward-facing plane at wall height. Single-sided, so orbiting
+    // from above culls it (room stays open) while it appears overhead in Walk.
+    const ceilW = px2ft(bb.w) + 1, ceilH = px2ft(bb.h) + 1;
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(ceilW, ceilH), matCeiling);
+    ceil.rotation.x = Math.PI / 2; // normal points down
+    ceil.position.y = state.wallHeightFt;
+    sceneRoot.add(ceil);
   }
 
   // Per wall: build segments (with cutouts above/below openings). Hidden objects
@@ -279,6 +387,11 @@ export function rebuild() {
     for (const seg of segments) {
       const mesh = buildWallSegmentMesh(w, seg);
       if (mesh) { if (wallGhost) makeGhost(mesh); sceneRoot.add(mesh); }
+      // Baseboard along floor-touching segments (breaks at doors, runs under windows)
+      if (seg.yBottom < 0.01) {
+        const base = buildBaseboard(w, seg);
+        if (base) { if (wallGhost) makeGhost(base); sceneRoot.add(base); }
+      }
     }
     // Window glass panes
     for (const o of openings.filter(o => o.type === 'window')) {
@@ -620,9 +733,15 @@ function wallPointFromEvent(e) {
   const hits = _ray.intersectObjects(sceneRoot.children, true);
   for (const h of hits) {
     let o = h.object;
-    while (o) { if (o.userData?.wallId != null) return { x: h.point.x, z: h.point.z }; o = o.parent; }
+    while (o) { if (o.userData?.wallId != null) return { x: h.point.x, y: h.point.y, z: h.point.z }; o = o.parent; }
   }
   return null;
+}
+
+// Mount height (item base off floor) so the item's vertical CENTER sits at the
+// world Y the cursor points to on the wall. Clamped to keep the item on the wall.
+function mountHForHitY(item, hitY) {
+  return Math.max(0, Math.min(state.wallHeightFt - item.h, hitY - item.h / 2));
 }
 
 // Where a placed/dragged item should follow the cursor: wall items point at the
@@ -768,7 +887,9 @@ function updateGhost(type, rot, worldPt) {
     const img = worldToImage(worldPt);
     const pose = wallSnapPose(gi, img.x, img.y);
     if (pose) {
-      ghost.group.position.set(px2ft(pose.x - _offset.x), gi.mountH ?? 4, px2ft(pose.y - _offset.y));
+      // Follow the cursor height when pointing at a wall, else the default mount.
+      const mh = worldPt.y != null ? mountHForHitY(gi, worldPt.y) : (gi.mountH ?? 4);
+      ghost.group.position.set(px2ft(pose.x - _offset.x), mh, px2ft(pose.y - _offset.y));
       ghost.group.rotation.y = -pose.rot * Math.PI / 180;
       return;
     }
@@ -807,7 +928,15 @@ function endManip() {
 function applyManip(wp) {
   if (manip.kind === 'furn-move') {
     const f = state.furniture.find(x => x.id === manip.id);
-    if (f) { const img = worldToImage(wp); f.x = img.x - manip.offx; f.y = img.y - manip.offy; resolveAgainstWalls(f); emit(); }
+    if (f) {
+      const item = getItem(f.type);
+      const img = worldToImage(wp);
+      f.x = img.x - manip.offx; f.y = img.y - manip.offy;
+      // Wall items: dragging up/down the wall sets the mount height too.
+      if (item?.mount === 'wall' && wp.y != null) f.mountH = mountHForHitY(item, wp.y);
+      resolveAgainstWalls(f);
+      emit();
+    }
   } else if (manip.kind === 'furn-resize') {
     const f = state.furniture.find(x => x.id === manip.id);
     if (!f) return;
@@ -925,6 +1054,9 @@ document.addEventListener('pointerup', (e) => {
     if (wp) {
       const img = worldToImage(wp);
       const f = addFurniture(state.placingFurniture, img.x, img.y, state.placingRot);
+      const item = getItem(f.type);
+      // Wall item dropped on a wall: mount it at the height you pointed to.
+      if (item?.mount === 'wall' && wp.y != null) f.mountH = mountHForHitY(item, wp.y);
       fitBetweenWalls(f);
       state.placingFurniture = null;
       state.tool = 'pan';
@@ -1007,6 +1139,23 @@ function buildWallSegmentMesh(wall, seg) {
   const cz = px2ft((a.y + b.y) / 2 - _offset.y);
   const cy = (seg.yBottom + seg.yTop) / 2;
   mesh.position.set(cx, cy, cz);
+  mesh.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
+  return mesh;
+}
+
+const BASEBOARD_H = 0.4; // ~4.8"
+function buildBaseboard(wall, seg) {
+  const a = _mid(wall, seg.t1);
+  const b = _mid(wall, seg.t2);
+  const lenFt = px2ft(dist(a.x, a.y, b.x, b.y));
+  if (lenFt < 0.01) return null;
+  const geo = new THREE.BoxGeometry(lenFt, BASEBOARD_H, WALL_THICKNESS_FT + 0.12);
+  const mesh = new THREE.Mesh(geo, matBaseboard);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  const cx = px2ft((a.x + b.x) / 2 - _offset.x);
+  const cz = px2ft((a.y + b.y) / 2 - _offset.y);
+  mesh.position.set(cx, BASEBOARD_H / 2, cz);
   mesh.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
   return mesh;
 }
@@ -1143,7 +1292,8 @@ window.addEventListener('keyup', onKeyUp);
 
 export function enterWalk() {
   computeOffset();
-  camera.position.set(0, EYE_HEIGHT_FT, 0);
+  const sp = findSpawn();
+  camera.position.set(sp.x, EYE_HEIGHT_FT, sp.z);
   walk.yaw = 0;
   walk.pitch = 0;
   walk.dragging = false;
@@ -1167,6 +1317,31 @@ export function exitWalk() {
 
 // Wall collision: keep camera at least PLAYER_RADIUS from any wall segment.
 const PLAYER_RADIUS = 0.6;
+// Pick a safe walk start: the center of the largest enclosed room's largest floor
+// patch (guaranteed clear of walls). Falls back to the walls' bbox centre, and if
+// even that sits inside a wall's collision radius, spiral-searches outward for open
+// floor. Without this a spawn landing on an interior wall PINS the player — the
+// collision has no push-out, so every small step stays in range and only looking
+// works (movement looks dead).
+function findSpawn() {
+  rebuildCollision();
+  let sx = 0, sz = 0, bestArea = -1;
+  for (const r of getRooms()) {
+    for (const p of (r.patches || [])) {
+      const area = p.ww * p.wd;
+      if (area > bestArea) { bestArea = area; sx = p.cx; sz = p.cz; }
+    }
+  }
+  if (!collidesAt(sx, sz, collisionSegments)) return { x: sx, z: sz };
+  for (let rad = 0.5; rad <= 40; rad += 0.5) {
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 12) {
+      const x = sx + Math.cos(a) * rad, z = sz + Math.sin(a) * rad;
+      if (!collidesAt(x, z, collisionSegments)) return { x, z };
+    }
+  }
+  return { x: sx, z: sz };
+}
+
 function collideAndMove(prev, next) {
   // Build wall segments list (in feet) cached per rebuild.
   const segs = collisionSegments;

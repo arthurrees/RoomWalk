@@ -91,7 +91,10 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
   against the listing's stated sq ft.
 - **2D / 3D / Walk** views. Walk = click-drag look (NOT pointer lock — that was
   unreliable on Windows/Chromium), WASD/arrows move, Q/E turn, eye height 5'9",
-  collision against walls (doors walkable, windows block) and furniture.
+  collision against walls (doors walkable, windows block) and furniture. On enter,
+  `findSpawn()` drops the player at the largest room's centre (not the walls' bbox
+  centre, which can land on an interior wall — and since collision has no push-out,
+  spawning inside a wall would pin movement while look still works).
 - **Furniture & fixtures.** Catalog of appliances (fridge, range, dishwasher,
   counter), bath fixtures (toilet, vanity, tub, shower), and furniture (beds,
   sofa, chairs, tables, desk, dresser, wardrobe, TV stand). Box-proxy 3D
@@ -135,16 +138,27 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
 - **Wall-mounted items** (`mount:'wall'`, `mountH`): wall cabinet, floating
   shelf, wall TV, medicine cabinet, mirror, range hood (the **Wall** palette
   group). Snap flush to the nearest wall on its *interior* side, render lifted to
-  a mount height (adjustable via the panel **Height ±**), and **pass through**
-  floor-furniture and walk collision (they sit up out of the way). 2D shows them
-  with a dashed teal outline.
+  a mount height, and **pass through** floor-furniture and walk collision (they
+  sit up out of the way). 2D shows them with a dashed teal outline. Mount height
+  is set three ways: the panel **Height ±**, dragging the item up/down the wall in
+  3D/Walk (the drag tracks the world Y where the cursor hits the wall, via
+  `wallPointFromEvent` → `mountHForHitY`), and on placement it mounts at the
+  height you point to.
 - **Styling.** Floor material presets (wood/tile/carpet/concrete) + global wall
   colour (`Advanced → Style`); **per-wall** colour (select a wall in 2D *or* 3D);
   **per-room floors** — `view3d` flood-fills the wall-bounded space (walls incl.
   door spans are barriers), greedy-meshes each room's floor, and you click a
-  room's floor in 3D to set its material. Approximated with colour + roughness
-  (no image textures). Per-room overrides are keyed by an interior point so they
-  survive edits; room detection is cached by walls+overrides.
+  room's floor in 3D to set its material. Floors use a **procedurally drawn**
+  canvas texture per style (planks / grout / speckle / mottling — no image files);
+  patches get world-space UVs so one shared repeating texture tiles seamlessly
+  across them (`setFloorUVs`, 1 unit = `FLOOR_TEX_FT`). Per-room overrides are
+  keyed by an interior point so they survive edits; room detection is cached by
+  walls+overrides.
+- **3D realism.** Warm daylight (warm hemisphere + sun) with ACES tone mapping and
+  soft shadows; **baseboards** along every floor-touching wall segment (they break
+  at doorways, run under windows); a **ceiling** plane at wall height that's
+  single-sided facing down, so orbiting from above culls it (room stays open) while
+  it appears overhead in Walk.
 - **Drag collision.** Furniture stops at walls *during* a drag (resolve runs each
   frame, not just on release), in 2D and 3D/Walk.
 - **Hide objects.** Select any wall, door/window, or furniture item and hit
@@ -184,13 +198,14 @@ live in the `PAL` object at the top of `view2d.js`; UI colors in CSS `:root`.
 ## Roadmap
 
 Done: adaptive resize · direct 3D/Walk manipulation · auto-detect walls &
-doors/windows · gap-bridging · build-from-scratch grid · wall-mounted items ·
-floor/wall/per-wall/per-room styling · edge-anchored resize · drag collision ·
-undo/redo + autosave.
+doors/windows · gap-bridging · build-from-scratch grid · wall-mounted items
+(incl. drag-to-set mount height) · floor/wall/per-wall/per-room styling ·
+edge-anchored resize · drag collision · undo/redo + autosave · hide objects ·
+3D realism (procedural floor textures, baseboards, ceiling, warm lighting).
 
 Next / ideas:
-1. Richer materials (procedural wood grain / tile lines, optional ceiling &
-   baseboards) — the box-proxy look is still flat.
+1. Even richer materials — procedural wall texture / wallpaper, optional crown
+   moulding, window reflections. Floors, baseboards, and ceiling are done.
 2. Touch / mobile support (currently mouse-only) — separate effort.
 3. More item detail — dresser/wardrobe/bookcase/bench/TV stand/shower/wall
    TV now have dedicated proxies; ottoman and the thin wall pieces (shelf,
