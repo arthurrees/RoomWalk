@@ -40,6 +40,7 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
 | `geom.js` | Pure geometry helpers; unit format/parse; SAT OBB overlap (`obbOverlapMTV`); gap detection (`findGap`); shared constants |
 | `furniture.js` | Dependency-free catalog (real dims in feet) incl. wall-mounted items (`mount:'wall'`, `mountH`) + resize metadata + `unitCount`/`applyResize`/`sizeNote` |
 | `detect.js` | Dependency-free CV: `detectWalls` (threshold → thick-band extraction) and `detectOpenings` (gap classification: light-glass ⇒ window, narrow empty ⇒ door) |
+| `pdf.js` | Lazy-loads vendored PDF.js and renders an uploaded PDF page to a PNG data URL so the same image pipeline takes over (`isPdfFile`, `renderPdfToImage`) |
 | `collision.js` | Furniture↔wall overlap (`resolveAgainstWalls`), gap auto-fit (`fitBetweenWalls`), wall-item snapping (`snapToWall`/`wallSnapPose`), `isClipping`/`recomputeClips` |
 | `view2d.js` | 2D canvas: image/outline, world grid, pan/zoom, wall draw + snap, openings, furniture, scale pick. Renders on `subscribe(draw)` |
 | `view3d.js` | three.js scene: segmented walls (selectable), per-room flood-filled floors, openings, furniture proxies, wall-item mounting, OrbitControls, click-drag walk, 3D placement/picking |
@@ -57,8 +58,11 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
 
 ## Features implemented
 
-- **Upload + blueprint outline.** Image processed so dark lines → light graphite,
-  white bg → transparent. Toggle + detail (threshold) + opacity in Advanced.
+- **Upload + blueprint outline.** Accepts images (PNG/JPG/etc.) **and PDFs**. PDFs
+  are rendered to PNG by the vendored PDF.js (`vendor/pdfjs/`, lazy-loaded on
+  first PDF upload) and then go through the same image pipeline; multi-page PDFs
+  prompt for the page. The plan is processed so dark lines → light graphite, white
+  bg → transparent. Toggle + detail (threshold) + opacity in Advanced.
 - **Wall tracing.** Click two points; endpoint snap + horizontal/vertical axis
   snap. Walls render as bright accent strokes.
 - **Auto-detect walls** (`Advanced → Detect walls`, `detect.js`). Threshold the

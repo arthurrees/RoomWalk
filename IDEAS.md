@@ -116,6 +116,74 @@ Estimated effort: days to a couple of weeks, not the AR mountain.
 2. Add the PWA install (manifest + service worker, offline-capable).
 3. Optionally add freehand-straighten drawing on top.
 
+## Whole-house mode: Apartment vs House at load
+
+To support whole houses without piling complexity onto the common case (a single
+floor apartment), the app gates multi-floor behind a mode choice at load.
+
+### The mode picker
+
+When the app first opens, the user picks one of two cards:
+
+- **Apartment** loads the app exactly as it is today. Single floor, no level
+  controls, no extra UI. Nothing changes for the people who only ever need this.
+- **House** loads the same app plus multi-floor controls.
+
+The mode is just a flag on the project (`mode: 'apartment' | 'house'`). It is set
+at load and stored with the project so reopening keeps the same UX.
+
+### House mode adds
+
+- A **floor selector** in the top bar (Level 1, Level 2, Basement, etc.) and an
+  **add floor** button.
+- A **view layout** toggle for the 2D blueprint area:
+  - **Single floor:** one floor occupies the full canvas, the other is hidden
+    (or shown only as a faint underlay for alignment).
+  - **Side by side:** two floors render in the canvas at once for visual
+    comparison. Editing is locked to the currently selected one; the other one
+    is visible-but-inactive (deselected).
+- A **stair** primitive (see below) that connects two adjacent levels.
+
+### Swapping back to Apartment
+
+The user can switch a house project back to apartment by collapsing it: pick
+which floor to keep, save, and the floor controls disappear. The result is the
+exact current single-floor app, byte-for-byte. The discarded floors are dropped
+on save so the project shape matches apartment exactly.
+
+### Stairs (the only genuinely new primitive)
+
+A staircase has to do three things:
+
+1. **Render geometry** (treads + risers, or simpler proxies). Easy.
+2. **Cut a hole in the floor above** so you can see and walk into it. The current
+   per-room floor mesher assumes solid rectangles; this would mark a "no-floor
+   rectangle" the mesher honors. Real, bounded refactor.
+3. **Move the walk player between levels.** Two options: simulate stepping
+   (each tread bumps eye height a few inches) or treat the stair footprint as a
+   **ramp** that raises the player's y linearly as they walk along it. Ramp is
+   much simpler and feels totally fine in practice.
+
+Realistic first cut: a "Stair" item placed like furniture, fixed straight run
+(no L or U shapes yet), with `level` (the lower floor it starts on) and a
+direction. Drop it on level 0 and it auto-cuts a matching hole in level 1's
+floor and behaves as a ramp in walk mode. L-shaped and U-shaped stairs are a
+stretch goal once the straight run feels right.
+
+### What about auto floor-splitting from one image?
+
+Don't. Real multi-floor plans come as separate images per floor. The flow is:
+upload one image per level, trace or auto-detect walls on that level, place the
+stair so it lines up with the next level. Keeps the hard problem out of scope.
+
+### The honest cost
+
+Levels are not one feature in one place. They touch walls, openings, furniture,
+detection, 2D rendering, 3D rendering, walk collision, per-room floors (now per
+level), save/load, undo, and the new mode + floor selectors. None of those are
+hard individually, but it's many small careful touches plus a stair primitive
+that doesn't exist today.
+
 ## Startup / monetization direction
 
 If RoomWalk ever became a product, the pillars would be: ML auto-detection of

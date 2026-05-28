@@ -25,7 +25,7 @@
             <h4><span class="step">1 ·</span> Start your plan</h4>
             <p>Two ways in:</p>
             <ul>
-              <li><b>Upload floor plan</b> (top right) to trace over an image. It appears as a clean blueprint outline.</li>
+              <li><b>Upload floor plan</b> (top right) to trace over an image or PDF. It appears as a clean blueprint outline. If the PDF has multiple pages you'll be asked which one is the floor plan.</li>
               <li><b>Start from scratch</b> to draw on a blank 1-ft grid. Great when all you have is a 3D/listing render: keep it open for reference and rebuild the layout on the grid.</li>
             </ul>
           </div>
@@ -103,10 +103,11 @@
       <button data-view="3d">3D</button>
       <button data-view="walk">Walk</button>
     </div>
+    <div id="esc-hint" class="esc-hint" hidden>Hit <kbd>Esc</kbd> to deselect</div>
     <div class="topbar-right">
       <label class="file-btn">
         Upload floor plan
-        <input type="file" id="file-input" accept="image/*" hidden />
+        <input type="file" id="file-input" accept="image/*,application/pdf,.pdf" hidden />
       </label>
       <button id="scratch-btn" class="ghost">Start from scratch</button>
       <span class="topbar-sep"></span>

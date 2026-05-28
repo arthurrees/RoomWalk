@@ -95,29 +95,55 @@ subscribe(() => {
   if (hint3) hint3.style.display = editing ? 'none' : '';
   const walkInstr = document.querySelector('.walk-instructions');
   if (walkInstr) walkInstr.style.display = editing ? 'none' : '';
+  // Top-bar Esc hint: only visible when something is selected (otherwise noise).
+  const escHint = document.getElementById('esc-hint');
+  if (escHint) escHint.hidden = !editing;
 });
 
-// --- File upload (image) ---
+// --- File upload (image or PDF) ---
+// PDFs are rendered to a PNG via the vendored PDF.js, then the existing
+// image pipeline takes over unchanged (outline build, wall tracing, detect, etc).
 const fileInput = document.getElementById('file-input');
-fileInput.addEventListener('change', (e) => {
+fileInput.addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
-  if (!file) return;
-  // Read as a data URL so the image can be embedded when saving the project.
-  const reader = new FileReader();
-  reader.onload = () => {
-    const img = new Image();
-    img.onload = () => {
-      const outline = view2d.buildOutline(img, state.outlineThreshold);
-      state.image = { el: img, w: img.naturalWidth, h: img.naturalHeight, outline, dataUrl: reader.result };
-      view2d.fitImage();
-      emit();
-      toast('Floor plan loaded. Trace the walls with the Wall tool.');
-    };
-    img.src = reader.result;
-  };
-  reader.readAsDataURL(file);
+  if (!file) { fileInput.value = ''; return; }
+  try {
+    const { isPdfFile, renderPdfToImage } = await import('./pdf.js');
+    if (isPdfFile(file)) {
+      toast('Rendering PDF…');
+      const result = await renderPdfToImage(file);
+      fileInput.value = '';
+      if (!result) return; // user cancelled the page picker
+      loadImageDataUrl(result.dataUrl,
+        result.pageCount > 1
+          ? `PDF page ${result.pageNum} of ${result.pageCount} loaded. Trace the walls with the Wall tool.`
+          : 'PDF loaded. Trace the walls with the Wall tool.');
+      return;
+    }
+  } catch (err) {
+    console.error(err);
+    toast("Couldn't read that PDF. Try a different file or export it as PNG.", 4500);
+    fileInput.value = '';
+    return;
+  }
   fileInput.value = '';
+  // Image path: read as a data URL so it can be embedded when saving the project.
+  const reader = new FileReader();
+  reader.onload = () => loadImageDataUrl(reader.result, 'Floor plan loaded. Trace the walls with the Wall tool.');
+  reader.readAsDataURL(file);
 });
+
+function loadImageDataUrl(dataUrl, message) {
+  const img = new Image();
+  img.onload = () => {
+    const outline = view2d.buildOutline(img, state.outlineThreshold);
+    state.image = { el: img, w: img.naturalWidth, h: img.naturalHeight, outline, dataUrl };
+    view2d.fitImage();
+    emit();
+    if (message) toast(message);
+  };
+  img.src = dataUrl;
+}
 
 // Welcome-card buttons (empty state) reuse the top-bar actions.
 document.getElementById('welcome-upload').addEventListener('click', () => fileInput.click());
