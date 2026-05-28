@@ -216,6 +216,10 @@ Next / ideas:
 
 Deferred: importing external glTF/OBJ model files (chose catalog box-proxies).
 
+Big-picture vision (not committed work): see `IDEAS.md`. The headline idea is
+**mobile capture**, walking a real room with a phone camera (WebXR / AR) and
+drawing the plan in place, then furnishing and walking it with the existing viewer.
+
 ## Deploy status
 
 Live on Cloudflare Pages (`roomwalk.pages.dev`), repo `github.com/arthurrees/RoomWalk`.

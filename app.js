@@ -792,7 +792,11 @@ window.addEventListener('keydown', (e) => {
   if (k === 'delete' || k === 'backspace') {
     if (state.selection) { e.preventDefault(); deleteSelection(); }
   } else if (k === 'escape') {
-    if (state.placingFurniture) { state.placingFurniture = null; emit(); }
+    // Esc clears whatever you've grabbed onto: an armed placement, or a selection.
+    let changed = false;
+    if (state.placingFurniture) { state.placingFurniture = null; changed = true; }
+    if (state.selection) { state.selection = null; changed = true; }
+    if (changed) emit();
   } else if (k === '1') switchView('2d');
   else if (k === '2') switchView('3d');
   else if (k === '3') switchView('walk');
