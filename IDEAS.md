@@ -172,9 +172,15 @@ stretch goal once the straight run feels right.
 
 ### What about auto floor-splitting from one image?
 
-Don't. Real multi-floor plans come as separate images per floor. The flow is:
-upload one image per level, trace or auto-detect walls on that level, place the
-stair so it lines up with the next level. Keeps the hard problem out of scope.
+Don't. Real multi-floor plans come as separate pages or images per floor. The
+flow is: upload one image (or PDF page) per level, trace or auto-detect walls on
+that level, place the stair so it lines up with the next level. Keeps the hard
+problem out of scope.
+
+PDF upload is already shipped (`pdf.js` + vendored PDF.js), and the page picker
+lines up perfectly here: house plans typically come as a multi-page PDF with
+one floor per page, so House mode can reuse the picker to attach each PDF page
+to a level.
 
 ### The honest cost
 
