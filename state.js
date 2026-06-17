@@ -33,6 +33,9 @@ export const state = {
   scalePick: null,       // 2-point scale calibration: { p1:{x,y}, p2:{x,y}|null }
   placingFurniture: null, // catalog id armed for click-to-drop
   placingRot: 0,         // rotation (deg) of the ghost being placed
+  paletteOpen: false,    // Items palette visibility — independent of tool so it
+                         // can stay open across drops (tool auto-returns to Pan
+                         // after each placement) until the user explicitly closes it
 };
 
 const listeners = new Set();
@@ -55,6 +58,8 @@ export function setTool(t) {
   state.selection = null;
   if (t !== 'scale') state.scalePick = null;
   if (t !== 'furniture') state.placingFurniture = null;
+  // Toolbar buttons drive palette open/closed: Items opens, anything else closes.
+  state.paletteOpen = (t === 'furniture');
   emit();
 }
 
@@ -63,6 +68,17 @@ export function armFurniture(catalogId) {
   state.placingFurniture = catalogId;
   state.placingRot = 0;
   state.selection = null;
+  state.paletteOpen = true;
+  emit();
+}
+
+// Explicit "I'm done dropping items" — close palette and go back to Pan so the
+// just-placed items can be clicked to edit. Triggered by × in the palette.
+export function closePalette() {
+  state.paletteOpen = false;
+  state.placingFurniture = null;
+  state.selection = null;
+  if (state.tool === 'furniture') state.tool = 'pan';
   emit();
 }
 
@@ -200,6 +216,7 @@ export function resetAll() {
   state.selection = null;
   state.draftWallStart = null;
   state.placingFurniture = null;
+  state.paletteOpen = false;
   state.pan = { x: 0, y: 0 };
   state.zoom = 1;
   emit();

@@ -2,7 +2,7 @@
 import {
   state, subscribe, emit, setTool, setView, setScale, resetAll, reseedIds,
   clearWalls, clearOpenings, clearFurniture, deleteSelection, armFurniture,
-  replaceWalls, setDetectedOpenings, toggleHidden, showAllHidden,
+  replaceWalls, setDetectedOpenings, toggleHidden, showAllHidden, closePalette,
 } from './state.js';
 import { detectWalls, detectOpenings } from './detect.js';
 import { wallLengthPx, parseLength, formatLength, formatArea, FT_PER_M, PX_PER_FT_FALLBACK } from './geom.js';
@@ -77,12 +77,68 @@ function buildPalette() {
 }
 buildPalette();
 
+// --- Palette close (× in the palette header) ---
+// Explicit "I'm done dropping items": closes palette and returns to Pan.
+document.getElementById('palette-close').addEventListener('click', closePalette);
+
+// --- Contextual tool tips (small popup near top of stage) ---
+// Per-tool one-line guidance. Dismissed-forever per tool via localStorage so
+// returning users aren't lectured every session.
+const TIP_STORAGE_KEY = 'roomwalk.tip-dismissed';
+function tipDismissals() {
+  try { return JSON.parse(localStorage.getItem(TIP_STORAGE_KEY) || '{}'); }
+  catch { return {}; }
+}
+function dismissTip(tool) {
+  const cur = tipDismissals();
+  cur[tool] = 1;
+  try { localStorage.setItem(TIP_STORAGE_KEY, JSON.stringify(cur)); } catch {}
+  updateToolTip();
+}
+const TIPS = {
+  wall: {
+    title: 'Wall tool',
+    body: 'Click two points to draw a wall. Endpoints snap to existing wall ends and to horizontal/vertical lines. <kbd>Esc</kbd> cancels mid-draw. With <b>Pan</b>, click a wall to select it.',
+  },
+  door: {
+    title: 'Door tool',
+    body: 'Click on a wall to drop a door. Hover an <b>open gap</b> between two collinear walls and it auto-fits to fill the gap. With <b>Pan</b>: drag the middle to slide along the wall, drag an end to resize, <kbd>Delete</kbd> to remove.',
+  },
+  window: {
+    title: 'Window tool',
+    body: 'Click on a wall to drop a window. Hover an <b>open gap</b> to auto-fit it across. With <b>Pan</b>: drag the middle to slide along the wall, drag an end to resize, <kbd>Delete</kbd> to remove.',
+  },
+  furniture: {
+    title: 'Items',
+    body: 'Pick from the palette, then click on the plan to drop. Tight gaps between walls <b>auto-fit</b>. <kbd>R</kbd> rotates. The palette stays open so you can keep placing — click the × in the palette (or pick another tool) when done.',
+  },
+};
+const toolTipEl = document.getElementById('tool-tip');
+const tipTitleEl = document.getElementById('tip-title');
+const tipBodyEl = document.getElementById('tip-body');
+document.getElementById('tip-close').addEventListener('click', () => {
+  if (TIPS[state.tool]) dismissTip(state.tool);
+  else toolTipEl.hidden = true;
+});
+function updateToolTip() {
+  const tip = TIPS[state.tool];
+  const dismissed = tipDismissals();
+  if (!tip || dismissed[state.tool]) {
+    toolTipEl.hidden = true;
+    return;
+  }
+  tipTitleEl.textContent = tip.title;
+  tipBodyEl.innerHTML = tip.body;
+  toolTipEl.hidden = false;
+}
+
 subscribe(() => {
   toolBtns.forEach(b => b.classList.toggle('active', b.dataset.tool === state.tool));
   updateScaleInfo();
   updateItemPanel();
-  // palette visibility + armed highlight
-  document.getElementById('palette').hidden = state.tool !== 'furniture';
+  updateToolTip();
+  // palette visibility + armed highlight (independent of tool — see state.paletteOpen)
+  document.getElementById('palette').hidden = !state.paletteOpen;
   paletteBody.querySelectorAll('.palette-item').forEach(b =>
     b.classList.toggle('armed', b.dataset.id === state.placingFurniture));
   // Declutter the bottom center: hide the hint pills (and walk instructions)
@@ -251,6 +307,7 @@ function applyProject(data, doneMsg = 'Project loaded.') {
   });
   state.selection = null;
   state.placingFurniture = null;
+  state.paletteOpen = false;
   reseedIds();
 
   // sync UI controls to the loaded state

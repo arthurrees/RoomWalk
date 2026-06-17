@@ -208,8 +208,16 @@
   </aside>
 
   <main class="stage">
+    <div class="tool-tip" id="tool-tip" hidden>
+      <button class="tip-close" id="tip-close" title="Dismiss" aria-label="Dismiss tip">×</button>
+      <div class="tip-title" id="tip-title"></div>
+      <div class="tip-body" id="tip-body"></div>
+    </div>
     <div class="palette" id="palette" hidden>
-      <div class="palette-head">Items <span class="palette-hint">click, then click on the plan · R rotates</span></div>
+      <div class="palette-head">
+        <span>Items <span class="palette-hint">click, then click on the plan · R rotates</span></span>
+        <button id="palette-close" class="palette-close" title="Close (switches to Pan)" aria-label="Close palette">×</button>
+      </div>
       <div class="palette-body" id="palette-body"></div>
     </div>
     <div class="readout" id="readout" hidden>

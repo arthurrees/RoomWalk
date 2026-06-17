@@ -36,7 +36,7 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
 |------|----------------|
 | `index.html` | Layout: top bar, toolbar, sectioned Advanced dropdown, How-to guide, palette, readout/selection panels, three.js import map |
 | `styles.css` | ThinkPad-inspired theme (see Theme below) |
-| `state.js` | Central `state` object + `subscribe`/`emit`; mutators (addWall, addOpening, addFurniture, setScale, replaceWalls, setDetectedOpenings, etc.); `reseedIds()` after load |
+| `state.js` | Central `state` object + `subscribe`/`emit`; mutators (addWall, addOpening, addFurniture, setScale, replaceWalls, setDetectedOpenings, `closePalette`, etc.); `state.paletteOpen` is independent of `state.tool`; `reseedIds()` after load |
 | `geom.js` | Pure geometry helpers; unit format/parse; SAT OBB overlap (`obbOverlapMTV`); gap detection (`findGap`); shared constants |
 | `furniture.js` | Dependency-free catalog (real dims in feet) incl. wall-mounted items (`mount:'wall'`, `mountH`) + resize metadata + `unitCount`/`applyResize`/`sizeNote` |
 | `detect.js` | Dependency-free CV: `detectWalls` (threshold → thick-band extraction) and `detectOpenings` (gap classification: light-glass ⇒ window, narrow empty ⇒ door) |
@@ -44,7 +44,7 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
 | `collision.js` | Furniture↔wall overlap (`resolveAgainstWalls`), gap auto-fit (`fitBetweenWalls`), wall-item snapping (`snapToWall`/`wallSnapPose`), `isClipping`/`recomputeClips` |
 | `view2d.js` | 2D canvas: image/outline, world grid, pan/zoom, wall draw + snap, openings, furniture, scale pick. Renders on `subscribe(draw)` |
 | `view3d.js` | three.js scene: segmented walls (selectable), per-room flood-filled floors, openings, furniture proxies, wall-item mounting, OrbitControls, click-drag walk, 3D placement/picking |
-| `app.js` | Wires DOM/UI to state and views; calibration modals; save/open; **autosave + undo/redo**; detection + start-from-scratch; keyboard shortcuts |
+| `app.js` | Wires DOM/UI to state and views; calibration modals; save/open; **autosave + undo/redo**; detection + start-from-scratch; keyboard shortcuts; **contextual tool tips** (per-tool one-line popup, dismissed-forever via `localStorage` key `roomwalk.tip-dismissed`) |
 
 ### Coordinate model
 - All geometry (walls, openings, furniture) is stored in **image-pixel
@@ -109,8 +109,12 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
   seat ring + bowl divot; stove has 4 burners + oven handle; fridge/dishwasher
   have a handle (+ door seam on tall units). Bed/sofa/chair/table left simpler.
   - **Placement:** Items tool (shortcut `I`) → palette → click item to arm →
-    click to drop. Works in 2D, 3D, and Walk. After dropping, auto-switches to
-    Pan with the item selected. R rotates, Delete removes.
+    click to drop. Works in 2D, 3D, and Walk. After dropping, tool returns to
+    **Pan** and nothing is selected, but the **palette stays open** so you can
+    pick the next item immediately. Palette visibility is driven by
+    `state.paletteOpen` (independent of `state.tool`); the × in the palette
+    header calls `closePalette()` to dismiss it. Switching to any non-Items
+    toolbar tool also closes the palette. R rotates, Delete removes.
   - **Resize behaviors:** `units` items repeat parts (sink→double sink/basins,
     sofa→more cushions, counter→more bays — the dimension stays continuous, the
     sub-count is a render threshold); `stretch` scales; `fixed` (toilet only) can't
@@ -177,6 +181,13 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
   ↶ ↷ buttons; a drag coalesces into one step). Autosaves to `localStorage` and
   restores the last session on load; falls back to geometry-only if the embedded
   image exceeds the storage quota.
+- **Contextual tool tips.** Small popup near the top of the stage when the
+  **Wall**, **Door**, **Window**, or **Items** tool is active — explains
+  placement, snapping, gap auto-fit, and how to edit with Pan. Each tip has a ×
+  that dismisses it forever (keyed per-tool in `localStorage` under
+  `roomwalk.tip-dismissed`), so returning users aren't lectured. Content lives
+  in the `TIPS` table in `app.js`; the popup itself is `#tool-tip` in
+  `index.html` (styled by `.tool-tip` in `styles.css`).
 - **Save / Open.** Save downloads a self-contained `.json` (walls incl. per-wall
   colour, openings, furniture incl. `mountH`, scale, units, grid, floor/wall
   style, per-room floors, AND the floor-plan image as a data URL). Open restores
@@ -205,7 +216,9 @@ Done: adaptive resize · direct 3D/Walk manipulation · auto-detect walls &
 doors/windows · gap-bridging · build-from-scratch grid · wall-mounted items
 (incl. drag-to-set mount height) · floor/wall/per-wall/per-room styling ·
 edge-anchored resize · drag collision · undo/redo + autosave · hide objects ·
-3D realism (procedural floor textures, baseboards, ceiling, warm lighting).
+3D realism (procedural floor textures, baseboards, ceiling, warm lighting) ·
+persistent items palette (stays open across drops; × to dismiss) · contextual
+per-tool tip popups (dismissed-forever per tool).
 
 Next / ideas:
 1. Even richer materials — procedural wall texture / wallpaper, optional crown

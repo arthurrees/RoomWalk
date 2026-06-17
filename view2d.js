@@ -791,13 +791,15 @@ canvas.addEventListener('mousedown', (e) => {
   }
 
   if (state.tool === 'furniture') {
-    // Drop the armed item, then switch to select so it's ready to adjust.
+    // Drop the armed item, disarm + deselect, and return to Pan so the user
+    // can immediately click on the just-placed item to edit it. The palette
+    // stays open (state.paletteOpen) — pick another item to arm again.
     if (state.placingFurniture) {
       const f = addFurniture(state.placingFurniture, p.x, p.y, state.placingRot);
       fitBetweenWalls(f);
       state.placingFurniture = null;
+      state.selection = null;
       state.tool = 'pan';
-      state.selection = { kind: 'furniture', id: f.id };
       emit();
     }
     return;

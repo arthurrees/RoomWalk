@@ -1058,9 +1058,10 @@ document.addEventListener('pointerup', (e) => {
       // Wall item dropped on a wall: mount it at the height you pointed to.
       if (item?.mount === 'wall' && wp.y != null) f.mountH = mountHForHitY(item, wp.y);
       fitBetweenWalls(f);
+      // Disarm + deselect, return to Pan. Palette stays open via paletteOpen.
       state.placingFurniture = null;
+      state.selection = null;
       state.tool = 'pan';
-      state.selection = { kind: 'furniture', id: f.id };
       emit();
     }
   } else if (state.tool === 'pan' || state.tool === 'select') {
@@ -1123,10 +1124,40 @@ function _mid(wall, t) {
   };
 }
 
+// True if this wall endpoint coincides with another wall's endpoint (an L/X corner).
+const _JUNCT_TOL_FT = WALL_THICKNESS_FT; // endpoints within this count as "meeting"
+function _endpointMeets(wall, ex, ey) {
+  const tolPx = _JUNCT_TOL_FT * effectiveScale();
+  for (const w of state.walls) {
+    if (w === wall || w.id === wall.id) continue;
+    if (dist(ex, ey, w.x1, w.y1) <= tolPx) return true;
+    if (dist(ex, ey, w.x2, w.y2) <= tolPx) return true;
+  }
+  return false;
+}
+
+// Segment endpoints in pixel space, with the wall's OUTER ends extended half a wall
+// thickness into junction corners. Centerlines meet at a point, so two thick boxes leave
+// a notch at the outer corner; extending each end by T/2 makes them overlap and form a
+// clean corner. Only extends ends that actually meet another wall (no free-end overshoot).
+function segEndpoints(wall, seg) {
+  let ax = wall.x1 + (wall.x2 - wall.x1) * seg.t1;
+  let ay = wall.y1 + (wall.y2 - wall.y1) * seg.t1;
+  let bx = wall.x1 + (wall.x2 - wall.x1) * seg.t2;
+  let by = wall.y1 + (wall.y2 - wall.y1) * seg.t2;
+  const d = dist(ax, ay, bx, by);
+  if (d > 1e-6) {
+    const ux = (bx - ax) / d, uy = (by - ay) / d;
+    const ext = (WALL_THICKNESS_FT / 2) * effectiveScale();
+    if (seg.t1 <= 1e-6 && _endpointMeets(wall, wall.x1, wall.y1)) { ax -= ux * ext; ay -= uy * ext; }
+    if (seg.t2 >= 1 - 1e-6 && _endpointMeets(wall, wall.x2, wall.y2)) { bx += ux * ext; by += uy * ext; }
+  }
+  return { ax, ay, bx, by };
+}
+
 function buildWallSegmentMesh(wall, seg) {
-  const a = _mid(wall, seg.t1);
-  const b = _mid(wall, seg.t2);
-  const lenFt = px2ft(dist(a.x, a.y, b.x, b.y));
+  const { ax, ay, bx, by } = segEndpoints(wall, seg);
+  const lenFt = px2ft(dist(ax, ay, bx, by));
   if (lenFt < 0.01) return null;
   const h = seg.yTop - seg.yBottom;
   if (h < 0.01) return null;
@@ -1135,28 +1166,27 @@ function buildWallSegmentMesh(wall, seg) {
   mesh.userData.wallId = wall.id; // selectable in 3D
   mesh.castShadow = true;
   mesh.receiveShadow = true;
-  const cx = px2ft((a.x + b.x) / 2 - _offset.x);
-  const cz = px2ft((a.y + b.y) / 2 - _offset.y);
+  const cx = px2ft((ax + bx) / 2 - _offset.x);
+  const cz = px2ft((ay + by) / 2 - _offset.y);
   const cy = (seg.yBottom + seg.yTop) / 2;
   mesh.position.set(cx, cy, cz);
-  mesh.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
+  mesh.rotation.y = -Math.atan2(by - ay, bx - ax);
   return mesh;
 }
 
 const BASEBOARD_H = 0.4; // ~4.8"
 function buildBaseboard(wall, seg) {
-  const a = _mid(wall, seg.t1);
-  const b = _mid(wall, seg.t2);
-  const lenFt = px2ft(dist(a.x, a.y, b.x, b.y));
+  const { ax, ay, bx, by } = segEndpoints(wall, seg);
+  const lenFt = px2ft(dist(ax, ay, bx, by));
   if (lenFt < 0.01) return null;
   const geo = new THREE.BoxGeometry(lenFt, BASEBOARD_H, WALL_THICKNESS_FT + 0.12);
   const mesh = new THREE.Mesh(geo, matBaseboard);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
-  const cx = px2ft((a.x + b.x) / 2 - _offset.x);
-  const cz = px2ft((a.y + b.y) / 2 - _offset.y);
+  const cx = px2ft((ax + bx) / 2 - _offset.x);
+  const cz = px2ft((ay + by) / 2 - _offset.y);
   mesh.position.set(cx, BASEBOARD_H / 2, cz);
-  mesh.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
+  mesh.rotation.y = -Math.atan2(by - ay, bx - ax);
   return mesh;
 }
 
