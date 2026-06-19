@@ -4,6 +4,25 @@ Most recent first. Resume point if a chat disconnects.
 
 ---
 
+## 2026-06-19 — Heuristic wall detector restored as a separate option; theme finalized
+
+**Two "Detect walls" options now** (user finds the pre-ML heuristic detects better on
+clean plans). Advanced → Detect:
+- `Detect walls` → `runDetectWallsHeuristic()` — the dependency-free `detectWalls`
+  (threshold → thick-band extraction), un-tagged = the primary/recommended one.
+- `✨ Detect walls (ML, beta)` → `runDetectWallsML()` — the ONNX path (unchanged).
+Both apply via `setDetectedWalls` (preserve + re-home existing openings). Doors/windows
+button unchanged. Wired in the `data-action` dispatch; heuristic handler mirrors the ML
+one minus the model download + "(beta)" wording.
+
+**Theme finalized:** kept **dark Foundry only** — removed the light/dark toggle
+(theme-select, light CSS block, `setTheme` exports in view2d/view3d, `applyTheme` in
+app.js all gone; `--glass` var kept for the floating panels). **Blue corrected** to the
+true FORWARD `#2F5FE0` everywhere (walls were a lighter `#3F72EF` and looked off);
+selection/grips use brighter `#5B8DEF` (2D + 3D). Favicon + CLAUDE.md theme section updated.
+
+---
+
 ## 2026-06-19 — Foundry reskin + light/dark theme toggle (uncommitted)
 
 Reskinned RoomWalk from the ThinkPad red/near-black to the **FORWARD "Foundry workspace"**

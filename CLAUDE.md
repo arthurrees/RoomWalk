@@ -68,10 +68,13 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
   (within ~10°, `AXIS_SNAP_DEG`) and snaps to an existing corner only if that corner
   lies on the straightened line — so nearby wall endpoints (esp. after ML detection)
   don't yank the wall crooked. Walls render as bright accent strokes.
-- **Auto-detect walls** (`Advanced → Detect walls`, `detect.js`). Threshold the
-  image, keep only *thick long* strokes (rejects text/dimension lines via a
-  min-band-thickness test), extract axis-aligned centerlines → `replaceWalls`.
-  Tuned for solid-wall plans; thin double-line plans degrade to manual tracing.
+- **Auto-detect walls — heuristic** (`Advanced → Detect walls`, `detect.js`). Threshold
+  the image, keep only *thick long* strokes (rejects text/dimension lines via a
+  min-band-thickness test), extract axis-aligned centerlines. Applied via
+  `setDetectedWalls` (preserves & re-homes existing doors/windows, same as the ML path).
+  Tuned for solid-wall plans; thin double-line plans degrade to manual tracing. This is
+  the **primary** wall detector — on clean blueprints it often beats the ML model, so it's
+  the un-tagged "Detect walls" button; the ML one below is labelled "(ML, beta)".
 - **Build from scratch.** `Start from scratch` (top bar) → a blank 1-ft world
   grid (`state.grid`); walls snap to it and scale is pre-set so dimensions are
   real-by-construction. Lets students with only a 3D/listing render rebuild a

@@ -494,6 +494,7 @@ advMenu.querySelectorAll('button[data-action]').forEach(b => {
     advMenu.hidden = true;
     if (a === 'set-scale') startSetScale();
     else if (a === 'calibrate-sqft') openCalibrateSqft();
+    else if (a === 'detect-walls') runDetectWallsHeuristic();
     else if (a === 'detect-walls-ml') runDetectWallsML();
     else if (a === 'detect-dw-ml') runDetectDoorsWindowsML();
     else if (a === 'clear-walls') { clearWalls(); toast('Walls cleared'); }
@@ -503,6 +504,25 @@ advMenu.querySelectorAll('button[data-action]').forEach(b => {
     else if (a === 'reset-all') { if (confirm('Reset everything?')) { resetAll(); toast('Reset.'); } }
   });
 });
+
+// Heuristic wall detection (dependency-free, no ML). Thresholds the image and pulls out
+// thick axis-aligned bands. Tends to beat the ML model on clean solid-wall blueprints;
+// thin double-line plans degrade to manual tracing. Same apply path as the ML detector
+// (`setDetectedWalls` preserves & re-homes any existing doors/windows).
+function runDetectWallsHeuristic() {
+  if (!state.image?.el) { toast('Upload a floor plan first.'); return; }
+  let walls = [];
+  try { walls = detectWalls(state.image.el); } catch (err) { console.error(err); }
+  if (!walls.length) {
+    toast('Couldn’t detect walls on this plan. Trace them with the Wall tool.', 5000);
+    return;
+  }
+  setDetectedWalls(walls);   // preserves & re-homes any existing doors/windows
+  if (state.view !== '2d') switchView('2d');
+  const n = walls.length;
+  const kept = state.openings.length;
+  toast(`Detected ${n} wall${n === 1 ? '' : 's'}${kept ? `, kept ${kept} door/window${kept === 1 ? '' : 's'}` : ''}. Fix with the Wall tool.`, 5000);
+}
 
 // ML wall detection (on-device ONNX), lazy-loaded on first use; the heuristic
 // detector is the fallback. Re-runnable (replaces the wall set). Detect walls

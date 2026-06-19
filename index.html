@@ -49,8 +49,9 @@
             <h4><span class="step">2 ·</span> Detect &amp; fix the layout</h4>
             <p>Once it's uploaded or drawn, head to <b>Advanced</b> and run detection in this order:</p>
             <ul>
-              <li><b>Detect Doors &amp; Windows</b> first, then <b>Detect Walls</b>, so the walls fit themselves around the openings.</li>
-              <li>It's a beta machine learning model, so it can be finnicky. If something generates incorrectly, fix it right in the 2D view: drag the endpoints of doors, walls, and windows, drag a whole wall to shift it, or slide doors and windows along their walls.</li>
+              <li>Run <b>ML Detect Doors &amp; Windows (Beta)</b> first, then detect the walls, so the walls fit themselves around the openings.</li>
+              <li>You get two ways to find walls. <b>Detect walls</b> is the standard finder that traces the solid straight lines on the plan, and it's usually best on clean blueprints. <b>ML Detect Walls (Beta)</b> uses a machine-learning model that can catch trickier or thinner interior walls the standard one misses. They do the same job, so if one gives you a messy result, just run the other instead.</li>
+              <li>The ML options are beta, so they can be finnicky. However you detect, you can fix anything in the 2D view: drag the endpoints of doors, walls, and windows, drag a whole wall to shift it, or slide doors and windows along their walls.</li>
               <li>If detection really misses the mark, just draw the walls, doors, and windows yourself with the tools on the left.</li>
             </ul>
           </div>
@@ -185,8 +186,9 @@
         <button id="advanced-btn" class="ghost">Advanced ▾</button>
         <div class="dropdown-menu" id="advanced-menu" hidden>
           <div class="menu-sec">Detect</div>
-          <button data-action="detect-dw-ml">✨ Detect doors &amp; windows</button>
-          <button data-action="detect-walls-ml">✨ Detect walls</button>
+          <button data-action="detect-dw-ml">ML Detect Doors &amp; Windows (Beta)</button>
+          <button data-action="detect-walls">Detect walls</button>
+          <button data-action="detect-walls-ml">ML Detect Walls (Beta)</button>
 
           <div class="menu-sec">Scale &amp; units</div>
           <button data-action="set-scale">Set scale by dimension…</button>
