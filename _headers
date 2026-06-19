@@ -4,3 +4,13 @@
 # unchanged, so this stays fast while never going stale.
 /*
   Cache-Control: no-cache
+
+# Vendored libraries (ONNX runtime, three.js, PDF.js) and ML models are large and
+# pinned by filename — they change only when we deliberately swap the file. Cache them
+# hard and bust by renaming (e.g. models/walls-v1.onnx). Last matching rule wins, so
+# these override the no-cache above for their paths.
+/vendor/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/models/*
+  Cache-Control: public, max-age=31536000, immutable

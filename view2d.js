@@ -7,36 +7,39 @@ import {
 } from './geom.js';
 import { getItem, unitCount, applyResize, sizeNote } from './furniture.js';
 import { resolveAgainstWalls, fitBetweenWalls, recomputeClips, wallSnapPose } from './collision.js';
+import { detectDebug } from './detect.js';
 
 // ThinkPad-inspired palette: matte near-black, graphite reference lines,
 // ThinkPad red as the single accent for the user's own geometry.
 const PAL = {
-  canvasBg: '#16171a',
+  canvasBg: '#181b22',
   grid: 'rgba(255,255,255,0.035)',
-  wall: '#e2232a',          // traced walls / outline — ThinkPad red
-  wallSel: '#ff3b43',       // selected wall — bright crimson
-  node: '#e2232a',          // wall endpoint dots
-  draft: '#e2232a',
-  draftEnd: '#ff3b43',
-  // Openings keep their own identity so they never blend into the red wall:
+  wall: '#2f5fe0',          // traced walls / outline — Foundry blue
+  wallSel: '#5b8def',       // selected wall — brighter blue
+  node: '#2f5fe0',          // wall endpoint dots
+  draft: '#2f5fe0',
+  draftEnd: '#5b8def',
+  // Openings keep their own identity so they never blend into the blue wall:
   door: '#a8723f',          // generic wood brown
   doorSel: '#d49356',       // brighter brown when selected
   window: '#6fb7dd',        // generic light blue
   windowSel: '#9ad4f0',     // brighter blue when selected
-  handle: '#e2232a',        // red grips mark the active opening
-  accentFill: 'rgba(226,35,42,0.95)',
-  accentStroke: 'rgba(226,35,42,0.7)',
+  handle: '#5b8def',        // blue grips mark the active opening
+  accentFill: 'rgba(47,95,224,0.95)',
+  accentStroke: 'rgba(47,95,224,0.7)',
   scalePick: '#f0a500',     // amber — a distinct, temporary measurement guide
   furnFill: 'rgba(125,134,144,0.32)',
   furnStroke: '#aab2bd',
   wallMountStroke: '#7fb7c8',   // teal dashed outline = wall-mounted item
   furnLabel: '#dfe4ea',
-  furnSel: '#ff3b43',
+  furnSel: '#5b8def',
   furnGhost: 'rgba(170,178,189,0.45)',
   warn: '#ff4d4d',
+  glow: 'rgba(47,95,224,0.45)',
 };
 
 const SNAP_PX = 12;            // endpoint snap radius (screen px)
+const AXIS_SNAP_DEG = 10;      // straighten a draft wall to H/V within this many degrees
 const WALL_HIT_PX = 8;         // wall click hit-test radius
 const HANDLE_PX = 10;          // resize-handle visual size (screen px)
 const HANDLE_HIT_PAD = 6;      // extra hit padding around handles
@@ -149,10 +152,10 @@ export function draw() {
     ctx.globalAlpha = 1;
   }
 
-  // Walls — ThinkPad red strokes with a faint matching glow.
+  // Walls — Foundry blue strokes with a faint matching glow.
   ctx.lineCap = 'round';
   ctx.save();
-  ctx.shadowColor = 'rgba(226,35,42,0.45)';
+  ctx.shadowColor = PAL.glow;
   ctx.shadowBlur = 3;
   for (const w of state.walls) {
     const isSel = state.selection?.kind === 'wall' && state.selection.id === w.id;
@@ -173,6 +176,17 @@ export function draw() {
     drawWorldDot(w.x2, w.y2, 3 / state.zoom, PAL.node);
   }
   ctx.globalAlpha = 1;
+
+  // Grab handles on the selected wall's endpoints (draggable corners).
+  if (state.selection?.kind === 'wall') {
+    const sw = state.walls.find(w => w.id === state.selection.id);
+    if (sw && !sw.bridge) {
+      for (const [hx, hy] of [[sw.x1, sw.y1], [sw.x2, sw.y2]]) {
+        drawWorldDot(hx, hy, (HANDLE_PX + 1) / state.zoom, PAL.handle);
+        drawWorldDot(hx, hy, (HANDLE_PX - 3) / state.zoom, PAL.canvasBg);
+      }
+    }
+  }
 
   // In-progress wall
   if (state.draftWallStart) {
@@ -243,12 +257,76 @@ export function draw() {
     drawOpeningPreview(state.hover);
   }
 
+  // ML detection debug overlay (Advanced → Show detection debug)
+  if (state.debugDetect) drawDetectDebug();
+
   ctx.restore();
 
   // HUD overlays (in screen space)
   if (!state.image && state.walls.length === 0) {
     // hint text only when fully empty
   }
+}
+
+// Draw the last ML door/window run's diagnostics on top of the plan: the raw
+// model box, plus what placement DID with it (attach to a wall / bridge / drop).
+// Lets us watch the lossy placement step on the actual plan instead of reading
+// console logs. Runs inside the world transform, so widths divide by zoom.
+const DBG = { door: PAL.door, window: PAL.window, attach: '#37d67a', bridge: '#ff9d3b', drop: PAL.warn };
+function drawDetectDebug() {
+  const dw = detectDebug.dw;
+  if (!dw || !dw.records?.length) return;
+  const z = state.zoom;
+  ctx.save();
+  for (const r of dw.records) {
+    const boxCol = DBG[r.type] || PAL.door;
+    const dropped = r.decision.startsWith('DROP');
+    // Raw model box — dashed, faint (solid-ish if it survived placement).
+    ctx.setLineDash([5 / z, 4 / z]);
+    ctx.lineWidth = 1.5 / z;
+    ctx.globalAlpha = dropped ? 0.4 : 0.85;
+    ctx.strokeStyle = boxCol;
+    ctx.strokeRect(r.bx1, r.by1, r.bx2 - r.bx1, r.by2 - r.by1);
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+
+    const bcx = (r.bx1 + r.bx2) / 2, bcy = (r.by1 + r.by2) / 2;
+    if (r.decision === 'attach') {
+      // line from the box to where the opening landed on the wall + a dot there
+      ctx.strokeStyle = DBG.attach; ctx.lineWidth = 1.5 / z;
+      ctx.beginPath(); ctx.moveTo(bcx, bcy); ctx.lineTo(r.placeX, r.placeY); ctx.stroke();
+      drawWorldDot(r.placeX, r.placeY, 4 / z, DBG.attach);
+    } else if (r.decision === 'bridge' && r.seg) {
+      // the floating bridge wall the opening was dropped onto
+      ctx.strokeStyle = DBG.bridge; ctx.lineWidth = 4 / z; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(r.seg.x1, r.seg.y1); ctx.lineTo(r.seg.x2, r.seg.y2); ctx.stroke();
+    } else if (dropped) {
+      const s = 6 / z; // red X over dropped detections
+      ctx.strokeStyle = DBG.drop; ctx.lineWidth = 2 / z;
+      ctx.beginPath();
+      ctx.moveTo(bcx - s, bcy - s); ctx.lineTo(bcx + s, bcy + s);
+      ctx.moveTo(bcx + s, bcy - s); ctx.lineTo(bcx - s, bcy + s);
+      ctx.stroke();
+    }
+    dbgLabel(r.bx1, r.by1, `${r.type} ${r.conf} ${r.decision}`, boxCol);
+  }
+  ctx.restore();
+}
+
+// Small screen-space label anchored just above a world point (mirrors
+// drawLengthLabel's transform reset so text stays crisp at any zoom).
+function dbgLabel(wx, wy, text, color) {
+  const p = w2s(wx, wy);
+  ctx.save();
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.font = '10px ui-monospace, monospace';
+  const w = ctx.measureText(text).width + 6;
+  ctx.fillStyle = 'rgba(8,9,11,0.78)';
+  ctx.fillRect(p.x, p.y - 13, w, 13);
+  ctx.fillStyle = color;
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, p.x + 3, p.y - 6);
+  ctx.restore();
 }
 
 function drawGrid(rect) {
@@ -267,9 +345,10 @@ function drawGrid(rect) {
   ctx.stroke();
 }
 
-// 1-ft world-space grid (zoom/pan aware), shown only in build-from-scratch mode.
+// 1-ft world-space grid (zoom/pan aware), shown only in build-from-scratch mode
+// (never when tracing a blueprint — then placement is fluid).
 function drawWorldGrid(rect) {
-  if (!state.grid) return;
+  if (!state.grid || state.image) return;
   const g = pxPerFt(); // one grid cell = 1 ft
   if (!(g > 0)) return;
   const x0 = -state.pan.x / state.zoom, x1 = (rect.width - state.pan.x) / state.zoom;
@@ -284,9 +363,10 @@ function drawWorldGrid(rect) {
   ctx.restore();
 }
 
-// Snap a world point to the nearest 1-ft grid intersection (grid mode only).
+// Snap a world point to the nearest 1-ft grid intersection (scratch mode only —
+// never when a blueprint image is loaded, so tracing stays fluid).
 function snapToGrid(x, y) {
-  if (!state.grid) return { x, y };
+  if (!state.grid || state.image) return { x, y };
   const g = pxPerFt();
   return { x: Math.round(x / g) * g, y: Math.round(y / g) * g };
 }
@@ -731,15 +811,20 @@ function scaleEndPoint(p1, rawX, rawY) {
 }
 
 // Compute snapped draft wall end based on current mouse position.
+// Straighten to H/V FIRST, then connect to an existing corner only if that corner
+// lies on the straightened line — so snapping to a corner never skews the wall
+// off-straight (the failure mode when lots of detected walls are around).
 function currentDraftWallEnd() {
   if (!state.draftWallStart) return null;
   const m = mouse.world;
-  // try endpoint snap
+  const start = state.draftWallStart;
+  const g = snapToGrid(m.x, m.y);                                   // grid (scratch mode only)
+  const axis = snapToAxis(start.x, start.y, g.x, g.y, AXIS_SNAP_DEG); // straightened end
   const snap = snapToEndpoint(state.walls, m.x, m.y, SNAP_PX / state.zoom);
-  if (snap) return { x: snap.x, y: snap.y };
-  // grid snap (scratch mode) then axis snap relative to start
-  const g = snapToGrid(m.x, m.y);
-  return snapToAxis(state.draftWallStart.x, state.draftWallStart.y, g.x, g.y);
+  if (snap && dist(snap.x, snap.y, axis.x, axis.y) <= SNAP_PX / state.zoom) {
+    return { x: snap.x, y: snap.y };  // corner is on the straight line → connect to it
+  }
+  return axis;                        // otherwise keep the wall straight
 }
 
 // ---------- Interaction ----------
@@ -819,8 +904,11 @@ canvas.addEventListener('mousedown', (e) => {
     if (hit) {
       state.selection = { kind: 'opening', id: hit.opening.id };
       emit();
+      const host0 = state.walls.find(w => w.id === hit.opening.wallId);
+      const fromBridgeId = host0 && host0.bridge ? host0.id : null; // carrier for free-float
+      const horiz0 = host0 ? Math.abs(host0.x2 - host0.x1) >= Math.abs(host0.y2 - host0.y1) : true;
       dragging = hit.intent === 'move'
-        ? { kind: 'opening-move', id: hit.opening.id }
+        ? { kind: 'opening-move', id: hit.opening.id, fromBridgeId, horiz: horiz0 }
         : { kind: 'opening-resize', id: hit.opening.id, edge: hit.intent };
       return;
     }
@@ -832,9 +920,30 @@ canvas.addEventListener('mousedown', (e) => {
       dragging = { kind: 'furniture-move', id: hitF.id, offx: p.x - hitF.x, offy: p.y - hitF.y };
       return;
     }
-    // 2. Click on a wall → select.
+    // 2a. Click a wall ENDPOINT → drag JUST that one point (not the whole wall, not the
+    // other walls at the corner). Stays axis-locked so the wall never goes diagonal.
+    const ep = hitTestWallEndpoint(p.x, p.y);
+    if (ep) {
+      state.selection = { kind: 'wall', id: ep.w.id };
+      emit();
+      dragging = { kind: 'wall-endpoint', id: ep.w.id, k: ep.k };
+      return;
+    }
+    // 2b. Click a wall body → select; drag moves it PERPENDICULAR to itself only (walls are
+    // never angled), and the perpendicular walls at its ends stretch to follow. That's a
+    // room-resize, not a free reposition.
     const hitW = hitTestWall(p.x, p.y);
-    if (hitW) {
+    if (hitW && !hitW.bridge) {
+      state.selection = { kind: 'wall', id: hitW.id };
+      emit();
+      const horiz = Math.abs(hitW.x2 - hitW.x1) >= Math.abs(hitW.y2 - hitW.y1);
+      const conn1 = wallEndpointCluster(hitW.x1, hitW.y1).filter(c => c.w.id !== hitW.id);
+      const conn2 = wallEndpointCluster(hitW.x2, hitW.y2).filter(c => c.w.id !== hitW.id);
+      dragging = { kind: 'wall-move', id: hitW.id, horiz, sx: p.x, sy: p.y,
+                   x1: hitW.x1, y1: hitW.y1, x2: hitW.x2, y2: hitW.y2, conn1, conn2 };
+      return;
+    }
+    if (hitW) { // a bridge (door carrier) — just select, don't wall-edit it
       state.selection = { kind: 'wall', id: hitW.id };
       emit();
       dragging = state.tool === 'pan' ? { kind: 'pan' } : null;
@@ -916,6 +1025,46 @@ canvas.addEventListener('mousemove', (e) => {
       draw();
       return;
     }
+    if (dragging.kind === 'wall-endpoint') {
+      // Move JUST this one endpoint, locked to keep the wall horizontal or vertical: the
+      // moved end stays on whichever axis (from the fixed far end) the cursor is nearer.
+      const w = state.walls.find(x => x.id === dragging.id);
+      if (w) {
+        const k = dragging.k, ok = k === '1' ? '2' : '1';
+        const fx = w['x' + ok], fy = w['y' + ok]; // fixed far end
+        let tx, ty;
+        if (Math.abs(p.x - fx) >= Math.abs(p.y - fy)) { ty = fy; tx = p.x; } // horizontal wall
+        else { tx = fx; ty = p.y; }                                          // vertical wall
+        if (state.grid) { const g = snapToGrid(tx, ty); tx = g.x; ty = g.y; }
+        // Re-join: if the axis-locked end lands on another corner, snap exactly to it.
+        const snap = nearestWallEndpoint(tx, ty, new Set([w.id + ':1', w.id + ':2']));
+        if (snap) { tx = snap.x; ty = snap.y; }
+        w['x' + k] = tx; w['y' + k] = ty;
+        emit();
+      }
+      return;
+    }
+    if (dragging.kind === 'wall-move') {
+      // Move the wall PERPENDICULAR to itself only; the perpendicular walls at its ends
+      // stretch to follow (room resize), so nothing bends and corners stay joined.
+      const w = state.walls.find(x => x.id === dragging.id);
+      if (w) {
+        const d = dragging;
+        if (d.horiz) {
+          let ny = d.y1 + (p.y - d.sy);
+          if (state.grid) ny = snapToGrid(0, ny).y;
+          w.y1 = ny; w.y2 = ny;
+          for (const c of [...d.conn1, ...d.conn2]) c.w['y' + c.k] = ny;
+        } else {
+          let nx = d.x1 + (p.x - d.sx);
+          if (state.grid) nx = snapToGrid(nx, 0).x;
+          w.x1 = nx; w.x2 = nx;
+          for (const c of [...d.conn1, ...d.conn2]) c.w['x' + c.k] = nx;
+        }
+        emit();
+      }
+      return;
+    }
     if (dragging.kind === 'furniture-move') {
       const f = state.furniture.find(x => x.id === dragging.id);
       if (f) {
@@ -949,18 +1098,38 @@ canvas.addEventListener('mousemove', (e) => {
     if (dragging.kind === 'opening-move') {
       const o = state.openings.find(x => x.id === dragging.id);
       if (o) {
-        const wall = state.walls.find(w => w.id === o.wallId);
-        // allow switching walls if user drags far from current
-        const near = nearestWall(state.walls, p.x, p.y, 60 / state.zoom);
-        if (near && near.wall.id !== wall.id && near.dist < 12 / state.zoom) {
-          o.wallId = near.wall.id;
-        }
-        const w2 = state.walls.find(w => w.id === o.wallId);
-        const proj = projectPointToSegment(p.x, p.y, w2.x1, w2.y1, w2.x2, w2.y2);
         const widthPx = openingWidthPx(o);
-        const len = wallLengthPx(w2);
-        const half = (widthPx / len) / 2;
-        o.t = Math.max(half, Math.min(1 - half, proj.t));
+        const half = widthPx / 2;
+        const R = 14 / state.zoom;                     // magnetic clip radius (screen px)
+        // Only snap to real walls long enough to actually hold the door — a short stray
+        // wall that juts out shouldn't capture it.
+        const realWalls = state.walls.filter(w => !w.bridge && wallLengthPx(w) >= widthPx * 0.6);
+        // The door always rides a CARRIER BRIDGE during the drag (smooth + visible); on
+        // release the mouseup handler re-attaches it to a real wall if it lies on one.
+        // If it grabbed off a real wall, spin up a carrier the first time it moves.
+        let host = state.walls.find(w => w.id === o.wallId);
+        if (!host || !host.bridge) {
+          host = addWall(p.x - half, p.y, p.x + half, p.y, { bridge: true });
+          o.wallId = host.id; o.t = 0.5;
+        }
+        // Magnetically ride the nearest real wall when close, CLAMPED to its span so the
+        // door clips at the wall's corners/ends; otherwise float free at the cursor.
+        const near = nearestWall(realWalls, p.x, p.y, R);
+        let cx, cy, ux, uy;
+        if (near) {
+          const w = near.wall, len = wallLengthPx(w) || 1;
+          const dx = w.x2 - w.x1, dy = w.y2 - w.y1;
+          ux = dx / len; uy = dy / len;
+          const ht = Math.min(0.49, half / len);
+          const t = Math.max(ht, Math.min(1 - ht, near.t));
+          cx = w.x1 + t * dx; cy = w.y1 + t * dy;
+        } else {
+          cx = p.x; cy = p.y;
+          ux = dragging.horiz ? 1 : 0; uy = dragging.horiz ? 0 : 1;
+        }
+        host.x1 = cx - half * ux; host.y1 = cy - half * uy;
+        host.x2 = cx + half * ux; host.y2 = cy + half * uy;
+        o.t = 0.5;
         emit();
       }
       return;
@@ -969,6 +1138,25 @@ canvas.addEventListener('mousemove', (e) => {
       const o = state.openings.find(x => x.id === dragging.id);
       if (o) {
         const wall = state.walls.find(w => w.id === o.wallId);
+        // Floating (bridge) opening: drag THIS end freely and snap it to the
+        // nearest wall ending (corner) or wall line, reshaping the door to fit.
+        if (wall && wall.bridge) {
+          const realWalls = state.walls.filter(w => !w.bridge);
+          let tx = p.x, ty = p.y;
+          const end = snapToEndpoint(realWalls, p.x, p.y, 14 / state.zoom);
+          if (end) { tx = end.x; ty = end.y; }
+          else {
+            const near = nearestWall(realWalls, p.x, p.y, 12 / state.zoom);
+            if (near) { tx = near.x; ty = near.y; }
+          }
+          if (dragging.edge === 'left') { wall.x1 = tx; wall.y1 = ty; } // t≈0 end
+          else { wall.x2 = tx; wall.y2 = ty; }                          // t≈1 end
+          const lenPx = Math.hypot(wall.x2 - wall.x1, wall.y2 - wall.y1);
+          o.width = Math.max(0.5, lenPx / pxPerFt()); // door fills the bridge
+          o.t = 0.5;
+          emit();
+          return;
+        }
         const proj = projectPointToSegment(p.x, p.y, wall.x1, wall.y1, wall.x2, wall.y2);
         const len = wallLengthPx(wall);
         const oldHalfT = (openingWidthPx(o) / len) / 2;
@@ -1052,6 +1240,36 @@ canvas.addEventListener('mouseup', () => {
     const f = state.furniture.find(x => x.id === dragging.id);
     if (f) { resolveAgainstWalls(f); emit(); }
   }
+  // After dragging an opening: if a floating opening now lies ALONG a real wall
+  // (both ends on its line), attach it to that wall so the wall segments around it
+  // — otherwise the wall covers the window in 3D and it "won't pop up". Only fires
+  // when it's genuinely on the wall, never a snap-to-nearest from afar. Then drop
+  // any carrier bridge no opening uses anymore.
+  if (dragging && (dragging.kind === 'opening-move' || dragging.kind === 'opening-resize')) {
+    const o = state.openings.find(x => x.id === dragging.id);
+    const host = o && state.walls.find(w => w.id === o.wallId);
+    if (o && host && host.bridge) {
+      const TOL = 14 / state.zoom;
+      const widthPx = openingWidthPx(o);  // KEEP the door's own size — don't resize it to the wall
+      for (const w of state.walls) {
+        if (w.bridge) continue;
+        const p1 = projectPointToSegment(host.x1, host.y1, w.x1, w.y1, w.x2, w.y2);
+        const p2 = projectPointToSegment(host.x2, host.y2, w.x1, w.y1, w.x2, w.y2);
+        if (p1.dist <= TOL && p2.dist <= TOL) {
+          const len = wallLengthPx(w);
+          o.wallId = w.id;
+          // Preserve width; just place the door's CENTER on the wall, clamped within its
+          // span so it clips at the corner (instead of stretching to fill the wall).
+          const half = Math.min(0.49, (widthPx / len) / 2);
+          o.t = Math.max(half, Math.min(1 - half, (p1.t + p2.t) / 2));
+          break;
+        }
+      }
+    }
+    // Drop any carrier bridge no opening uses anymore (incl. ones spun up mid-drag).
+    state.walls = state.walls.filter(w => !w.bridge || state.openings.some(op => op.wallId === w.id));
+    emit();
+  }
   mouse.down = false;
   dragging = null;
 });
@@ -1070,6 +1288,78 @@ canvas.addEventListener('wheel', (e) => {
   state.pan.y += (worldAfter.y - worldBefore.y) * state.zoom;
   draw();
 }, { passive: false });
+
+// ---------- Touch support (tablet) ----------
+// Non-invasive shim so the 2D editor works on touch without forking any of the
+// drawing / selection / drag logic: ONE finger is translated into the existing
+// mouse handlers (mousedown/move/up), and TWO fingers pinch-to-zoom + pan the
+// canvas (replacing the wheel + drag-pan). `touch-action: none` on the canvas
+// stops the browser from scrolling/zooming the page instead.
+let touchMode = null; // null | 'single' | 'pinch' | 'rest' (fingers down but ignored)
+let pinch = null;     // { dist, mx, my } in client px
+
+function dispatchMouse(type, t, button = 0) {
+  canvas.dispatchEvent(new MouseEvent(type, {
+    clientX: t.clientX, clientY: t.clientY, button, bubbles: true, cancelable: true,
+  }));
+}
+
+function pinchState(touches) {
+  const a = touches[0], b = touches[1];
+  return {
+    dist: Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY),
+    mx: (a.clientX + b.clientX) / 2,
+    my: (a.clientY + b.clientY) / 2,
+  };
+}
+
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    touchMode = 'single';
+    dispatchMouse('mousedown', e.touches[0]);
+  } else if (e.touches.length >= 2) {
+    // A second finger arrived: end any single-finger drag cleanly, then pinch.
+    if (touchMode === 'single') dispatchMouse('mouseup', e.touches[0]);
+    touchMode = 'pinch';
+    pinch = pinchState(e.touches);
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  if (touchMode === 'single' && e.touches.length === 1) {
+    dispatchMouse('mousemove', e.touches[0]);
+  } else if (touchMode === 'pinch' && e.touches.length >= 2) {
+    const cur = pinchState(e.touches);
+    const rect = canvas.getBoundingClientRect();
+    const sx = cur.mx - rect.left, sy = cur.my - rect.top;
+    // Zoom around the pinch midpoint (same math as the wheel handler)...
+    const worldBefore = s2w(sx, sy);
+    const factor = pinch.dist > 0 ? cur.dist / pinch.dist : 1;
+    state.zoom = Math.max(0.05, Math.min(40, state.zoom * factor));
+    const worldAfter = s2w(sx, sy);
+    state.pan.x += (worldAfter.x - worldBefore.x) * state.zoom;
+    state.pan.y += (worldAfter.y - worldBefore.y) * state.zoom;
+    // ...and pan by however far the two fingers' midpoint travelled.
+    state.pan.x += cur.mx - pinch.mx;
+    state.pan.y += cur.my - pinch.my;
+    pinch = cur;
+    draw();
+  }
+}, { passive: false });
+
+function endTouch(e) {
+  e.preventDefault();
+  if (touchMode === 'single' && e.changedTouches.length) {
+    dispatchMouse('mouseup', e.changedTouches[0]);
+  }
+  if (e.touches.length === 0) { touchMode = null; pinch = null; }
+  else if (e.touches.length === 1) { touchMode = 'rest'; pinch = null; } // wait for full release
+  else { touchMode = 'pinch'; pinch = pinchState(e.touches); }
+}
+canvas.addEventListener('touchend', endTouch, { passive: false });
+canvas.addEventListener('touchcancel', endTouch, { passive: false });
 
 window.addEventListener('keydown', (e) => {
   if (state.view !== '2d') return;
@@ -1093,6 +1383,51 @@ window.addEventListener('keydown', (e) => {
 function hitTestWall(px, py) {
   const near = nearestWall(state.walls, px, py, WALL_HIT_PX / state.zoom);
   return near?.wall ?? null;
+}
+
+// Nearest REAL-wall endpoint (corner) under the cursor, or null. Bridges (door carriers)
+// are edited via the door tools, so they're excluded from wall editing.
+function hitTestWallEndpoint(px, py) {
+  const r = (HANDLE_PX + HANDLE_HIT_PAD) / state.zoom;
+  let best = null, bestD = r;
+  for (const w of state.walls) {
+    if (w.bridge) continue;
+    for (const k of ['1', '2']) {
+      const d = dist(px, py, w['x' + k], w['y' + k]);
+      if (d <= bestD) { bestD = d; best = { w, k, x: w['x' + k], y: w['y' + k] }; }
+    }
+  }
+  return best;
+}
+
+// Every real-wall endpoint coincident with (gx,gy) — a shared CORNER. Dragging one
+// moves them all so joined walls stay connected.
+function wallEndpointCluster(gx, gy) {
+  const tol = 3; // px — endpoints this close are the same corner
+  const cl = [];
+  for (const w of state.walls) {
+    if (w.bridge) continue;
+    for (const k of ['1', '2']) {
+      if (dist(gx, gy, w['x' + k], w['y' + k]) <= tol) cl.push({ w, k });
+    }
+  }
+  return cl;
+}
+
+// Nearest real-wall endpoint to snap a moved point to (corner-join), or null. `exclude`
+// is a Set of "wallId:end" keys to ignore (the piece being dragged).
+function nearestWallEndpoint(px, py, exclude) {
+  const r = SNAP_PX / state.zoom;
+  let best = null, bestD = r;
+  for (const w of state.walls) {
+    if (w.bridge) continue;
+    for (const k of ['1', '2']) {
+      if (exclude && exclude.has(w.id + ':' + k)) continue;
+      const d = dist(px, py, w['x' + k], w['y' + k]);
+      if (d <= bestD) { bestD = d; best = { x: w['x' + k], y: w['y' + k] }; }
+    }
+  }
+  return best;
 }
 
 function hitTestOpening(px, py) {

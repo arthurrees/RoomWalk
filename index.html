@@ -4,6 +4,13 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>RoomWalk · design &amp; walk your floor plan</title>
+<meta name="description" content="Upload a floor plan or build from scratch, place to-scale furniture, then walk through your space in 3D, right in the browser." />
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<meta property="og:title" content="RoomWalk" />
+<meta property="og:description" content="Upload a floor plan or build from scratch, place to-scale furniture, then walk through your space in 3D, right in the browser." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://roomwalk.pages.dev/" />
+<meta name="twitter:card" content="summary" />
 <link rel="stylesheet" href="styles.css" />
 <script type="importmap">
 {
@@ -22,78 +29,132 @@
         <button id="help-btn" class="ghost">How to use ▾</button>
         <div class="dropdown-menu help-menu" id="help-menu" hidden>
           <div class="help-section">
-            <h4><span class="step">1 ·</span> Start your plan</h4>
-            <p>Two ways in:</p>
+            <h4>Getting around</h4>
+            <p>Everything lives around the edges of the screen:</p>
             <ul>
-              <li><b>Upload floor plan</b> (top right) to trace over an image or PDF. It appears as a clean blueprint outline. If the PDF has multiple pages you'll be asked which one is the floor plan.</li>
-              <li><b>Start from scratch</b> to draw on a blank 1-ft grid. Great when all you have is a 3D/listing render: keep it open for reference and rebuild the layout on the grid.</li>
+              <li>Your tools (Pan, Wall, Door, Window, Items) sit on the left, and they show up when you're in the 2D view.</li>
+              <li>Switch between <b>2D</b>, <b>3D</b>, and <b>Walk</b> with the buttons up top.</li>
+              <li><b>Advanced</b> (top right) is where detection, scaling, and the clear options live, and the readout next to it shows your footprint and floor area.</li>
             </ul>
           </div>
           <div class="help-section">
-            <h4><span class="step">2 ·</span> Add your walls</h4>
-            <p>Two ways. Try the automatic one first:</p>
+            <h4><span class="step">1 ·</span> Upload your plan</h4>
+            <p>Two ways to get started:</p>
             <ul>
-              <li><b>Detect walls (automatic)</b>: open <b>Advanced ▾</b> and click <b>Detect walls</b>. It traces the walls straight off your plan in one click. Works best on plans drawn with solid black walls.</li>
-              <li><b>Draw them yourself</b>: pick the <b>Wall</b> tool and click two points per wall (a start, then an end). Ends snap together and to straight horizontal/vertical lines. Perfect for touching up the auto-detect, or for plans it can't read.</li>
-            </ul>
-            <p>Want to start over? <b>Advanced ▾ → Clear walls</b>. Your walls become the 3D room.</p>
-          </div>
-          <div class="help-section">
-            <h4><span class="step">3 ·</span> Set the scale</h4>
-            <p>Calibrate once so everything is life-size. Open <b>Advanced ▾</b> and use any of:</p>
-            <ul>
-              <li><b>Set scale from a dimension</b>: click the two ends of a measurement printed on the plan (e.g. 24'-6"), then type it. Tip: use the longest dimension for best accuracy.</li>
-              <li>Or click a <b>wall you've drawn</b> and enter its real length.</li>
-              <li>Or <b>Calibrate by area</b> using the listing's square footage.</li>
-            </ul>
-            <p>Switch feet/inches ↔ meters under <b>Advanced → Units</b>. The box (top-right) shows your footprint and floor area to double-check.</p>
-          </div>
-          <div class="help-section">
-            <h4><span class="step">4 ·</span> Doors &amp; windows</h4>
-            <p>Two ways. Try the automatic one first:</p>
-            <ul>
-              <li><b>Detect doors &amp; windows (automatic)</b>: once your walls are in, open <b>Advanced ▾</b> and click <b>Detect doors &amp; windows</b>. It finds doorways and windows in the wall gaps. Works best on solid-wall plans; review and tidy up afterward.</li>
-              <li><b>Place them yourself</b>: choose <b>Door</b> or <b>Window</b>, then click on a wall to drop it. Or, if you left an open gap where a doorway goes, hover over the gap and it auto-fits a door/window to fill it.</li>
-              <li><b>Adjust</b>: with the <b>Pan</b> cursor, click one to select, then drag the middle to move it, drag an end to resize, or press <kbd>Delete</kbd> to remove.</li>
+              <li>Upload your floor plan in strict 2D format with the <b>Upload</b> button (top right). It shows up as a clean blueprint outline, and if it's a multi-page PDF, you'll pick which page is your plan.</li>
+              <li>No 2D plan? Hit <b>Start from scratch</b> to draw on a blank grid. That's handy if all you have is a 3D or listing render, so keep it open for reference and rebuild the layout yourself.</li>
             </ul>
           </div>
           <div class="help-section">
-            <h4><span class="step">5 ·</span> Furniture &amp; fixtures</h4>
-            <p>Click <b>Items</b>, choose a piece, then click on the plan to drop it. It auto-fits tight gaps and is selected right away.</p>
+            <h4><span class="step">2 ·</span> Detect &amp; fix the layout</h4>
+            <p>Once it's uploaded or drawn, head to <b>Advanced</b> and run detection in this order:</p>
             <ul>
-              <li>Drag to move; drag the red handles or use the panel to resize. Items stop at walls instead of passing through.</li>
-              <li><kbd>R</kbd> rotates · <kbd>Delete</kbd> removes.</li>
-              <li>A red ⚠ means it overlaps a wall or another item, so nudge it clear.</li>
-              <li><b>Wall-mounted items</b> (the <b>Wall</b> group: cabinets, shelves, TV, mirror) snap onto a wall at a height. Drag to slide them along the wall; use <b>Height −/+</b> in the panel to raise or lower.</li>
+              <li><b>Detect Doors &amp; Windows</b> first, then <b>Detect Walls</b>, so the walls fit themselves around the openings.</li>
+              <li>It's a beta machine learning model, so it can be finnicky. If something generates incorrectly, fix it right in the 2D view: drag the endpoints of doors, walls, and windows, drag a whole wall to shift it, or slide doors and windows along their walls.</li>
+              <li>If detection really misses the mark, just draw the walls, doors, and windows yourself with the tools on the left.</li>
             </ul>
           </div>
           <div class="help-section">
-            <h4><span class="step">6 ·</span> Style it</h4>
+            <h4><span class="step">3 ·</span> Scale it to life-size</h4>
+            <p>Once the doors, walls, and windows are in the right places, scale your floor plan so it's life-sized. Two ways:</p>
             <ul>
-              <li><b>Whole home</b>: under <b>Advanced ▾ → Style</b>, pick a floor material (wood / tile / carpet / concrete) and a wall colour.</li>
-              <li><b>One wall</b>: click a wall (in 2D or 3D) and set just its colour in the panel.</li>
-              <li><b>One room</b>: in <b>3D</b>, click a room's floor and choose its material, so rooms can differ (tile bathroom, wood living room).</li>
+              <li>Input a total sqft amount, and the whole plan scales to match.</li>
+              <li>Or select a wall and size it to what the matching wall on the floor plan says. Using the longest wall gives you the best accuracy.</li>
+            </ul>
+            <p>The readout in the top right shows your footprint and floor area so you can double-check it. When the layout's set, head to the <b>Design</b> menu to furnish and style it.</p>
+          </div>
+          <div class="help-section credits">
+            <h4>Credits</h4>
+            <p>RoomWalk is built on open-source work:</p>
+            <ul>
+              <li>3D rendering by <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT).</li>
+              <li>On-device detection runs on <a href="https://onnxruntime.ai/" target="_blank" rel="noopener">ONNX Runtime Web</a> (MIT).</li>
+              <li>PDF reading by <a href="https://mozilla.github.io/pdf.js/" target="_blank" rel="noopener">PDF.js</a> (Apache 2.0).</li>
+              <li>The wall &amp; door detection models were trained on floor-plan datasets from <a href="https://roboflow.com/" target="_blank" rel="noopener">Roboflow</a> (CC BY 4.0).</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="dropdown">
+        <button id="design-btn" class="ghost">Design ▾</button>
+        <div class="dropdown-menu help-menu" id="design-menu" hidden>
+          <div class="help-section">
+            <h4>Furnish it</h4>
+            <p>Click <b>Items</b>, pick a piece, then drop it onto the plan (works in 2D, 3D, or Walk):</p>
+            <ul>
+              <li>Drag a piece to move it, use the handles or the side panel to resize, and hit <kbd>R</kbd> to rotate or <kbd>Delete</kbd> to remove.</li>
+              <li>Items stop at walls instead of passing through, and a red ⚠ means it's overlapping something, so just nudge it clear.</li>
+              <li>Wall items like cabinets, shelves, TVs, and mirrors snap onto a wall. Slide them along it, and use <b>Height −/+</b> in the panel to raise or lower them.</li>
             </ul>
           </div>
           <div class="help-section">
-            <h4><span class="step">7 ·</span> Deleting things</h4>
-            <p>With the <b>Pan</b> cursor, click any wall, door, window, or furniture piece to select it, then press <kbd>Delete</kbd> (or <kbd>Backspace</kbd>) to remove it. Works in 2D, 3D, and Walk.</p>
+            <h4>Recolour &amp; style</h4>
+            <p>Select something and the side panel gives you its look:</p>
             <ul>
-              <li>Deleting a <b>door or window placed across a gap</b> reopens the gap, so it won't leave a solid wall behind.</li>
-              <li>To clear a whole category at once, use <b>Advanced ▾ → Clear walls / Clear doors/windows / Clear furniture</b>.</li>
+              <li>Click a wall (in 2D or 3D) to set its colour with the colour picker, or hit <b>Reset</b> to put it back.</li>
+              <li>In 3D, click a room's floor to pick its material (wood, tile, carpet, or concrete), so different rooms can look different.</li>
             </ul>
           </div>
           <div class="help-section">
-            <h4><span class="step">8 ·</span> View in 3D &amp; Walk</h4>
+            <h4>Hide things</h4>
+            <p>Select any wall, door, window, or item and hit <b>Hide</b> in the panel to make it see-through and click-through.</p>
             <ul>
-              <li><b>3D</b>: drag to orbit, scroll to zoom. You can place &amp; move items here too.</li>
-              <li><b>Walk</b>: click-drag to look, <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows to move, <kbd>Q</kbd>/<kbd>E</kbd> to turn. You're 5'9" tall and walls/furniture are solid.</li>
+              <li>Handy for reaching past a near wall to place something on the far one. It stays faintly visible, so you can click it again to bring it back.</li>
+              <li>To un-hide everything at once, use <b>Advanced &rarr; Show all hidden</b>.</li>
             </ul>
           </div>
           <div class="help-section">
-            <h4><span class="step">9 ·</span> Save &amp; undo</h4>
-            <p>Your work <b>autosaves</b> in this browser and reloads automatically next time. Made a mistake? <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> to redo (or the ↶ ↷ buttons).</p>
-            <p><b>Save</b> downloads your whole project (plan + walls + everything) as one file; <b>Open</b> loads it back later or on another computer.</p>
+            <h4>Delete &amp; clear</h4>
+            <ul>
+              <li>Select anything and press <kbd>Delete</kbd> (or the <b>Delete</b> button) to remove it. Deleting a door or window that fills a gap reopens the gap, so you won't be left with a solid wall.</li>
+              <li>To wipe a whole category, use <b>Advanced &rarr; Clear walls / Clear doors/windows / Clear furniture</b>, and <b>Reset everything</b> starts you over.</li>
+            </ul>
+          </div>
+          <div class="help-section">
+            <h4>View &amp; walk through</h4>
+            <ul>
+              <li>Switch to <b>3D</b> to orbit your place (drag to look, scroll to zoom).</li>
+              <li>Or <b>Walk</b> mode to walk through it at eye height. Use <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or the arrow keys to move, and <kbd>Q</kbd>/<kbd>E</kbd> to turn.</li>
+              <li>Your work autosaves in the browser. You can also hit <b>Save</b> to download the whole project as a file and open it again later.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="dropdown">
+        <button id="keys-btn" class="ghost">Shortcuts ▾</button>
+        <div class="dropdown-menu help-menu" id="keys-menu" hidden>
+          <div class="help-section">
+            <h4>Tools (in 2D)</h4>
+            <ul class="keys-list">
+              <li><kbd>V</kbd> Pan, select &amp; move</li>
+              <li><kbd>W</kbd> Wall tool</li>
+              <li><kbd>D</kbd> Door tool</li>
+              <li><kbd>R</kbd> Window tool</li>
+              <li><kbd>I</kbd> Items (furniture)</li>
+            </ul>
+          </div>
+          <div class="help-section">
+            <h4>Editing</h4>
+            <ul class="keys-list">
+              <li><kbd>R</kbd> Rotate the selected item 90&deg;</li>
+              <li><kbd>Delete</kbd> / <kbd>Backspace</kbd> Delete what's selected</li>
+              <li><kbd>Esc</kbd> Unselect, or cancel placing an item</li>
+              <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> Undo</li>
+              <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> Redo</li>
+            </ul>
+          </div>
+          <div class="help-section">
+            <h4>Views</h4>
+            <ul class="keys-list">
+              <li><kbd>1</kbd> 2D &nbsp; <kbd>2</kbd> 3D &nbsp; <kbd>3</kbd> Walk</li>
+            </ul>
+          </div>
+          <div class="help-section">
+            <h4>Walk mode</h4>
+            <ul class="keys-list">
+              <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrow keys to move</li>
+              <li><kbd>Q</kbd> / <kbd>E</kbd> to turn, click-drag to look</li>
+            </ul>
           </div>
         </div>
       </div>
@@ -124,13 +185,12 @@
         <button id="advanced-btn" class="ghost">Advanced ▾</button>
         <div class="dropdown-menu" id="advanced-menu" hidden>
           <div class="menu-sec">Detect</div>
-          <button data-action="detect-walls">Detect walls (beta)</button>
-          <button data-action="detect-openings">Detect doors &amp; windows (beta)</button>
+          <button data-action="detect-dw-ml">✨ Detect doors &amp; windows</button>
+          <button data-action="detect-walls-ml">✨ Detect walls</button>
 
           <div class="menu-sec">Scale &amp; units</div>
-          <button data-action="set-scale">Set scale from a dimension…</button>
-          <button data-action="calibrate-sqft">Calibrate by square footage…</button>
-          <button data-action="calibrate-distance">Calibrate by selected wall…</button>
+          <button data-action="set-scale">Set scale by dimension…</button>
+          <button data-action="calibrate-sqft">Set scale by square footage…</button>
           <label class="row">
             <span>Units</span>
             <select id="units-select">
@@ -143,33 +203,14 @@
             <input type="number" id="wall-height" min="6" max="14" step="0.5" value="9" />
           </label>
 
-          <div class="menu-sec">Style</div>
-          <label class="row">
-            <span>Floor</span>
-            <select id="floor-style">
-              <option value="wood">Wood</option>
-              <option value="tile">Tile</option>
-              <option value="carpet">Carpet</option>
-              <option value="concrete">Concrete</option>
-            </select>
-          </label>
-          <label class="row">
-            <span>Wall colour</span>
-            <input type="color" id="wall-color" value="#e9e6df" />
-          </label>
-
           <div class="menu-sec">Canvas</div>
           <label class="row">
             <span>Snap to grid (1 ft)</span>
             <input type="checkbox" id="grid-mode" />
           </label>
-          <label class="row">
-            <span>Blueprint outline</span>
-            <input type="checkbox" id="outline-mode" checked />
-          </label>
-          <label class="row">
-            <span>Outline detail</span>
-            <input type="range" id="outline-threshold" min="40" max="220" value="120" />
+          <label class="row" id="debug-detect-row" hidden>
+            <span>Show detection debug</span>
+            <input type="checkbox" id="debug-detect" />
           </label>
           <label class="row">
             <span>Plan opacity</span>
@@ -296,6 +337,16 @@
   </div>
 
   <div class="toast" id="toast" hidden></div>
+
+  <!-- Shown only on small (phone-sized) screens. Tablets and up get the full UI. -->
+  <div class="smallscreen-note" id="smallscreen-note" hidden>
+    <div class="ssn-card">
+      <div class="ssn-title">Best on a bigger screen</div>
+      <p>RoomWalk is built for a desktop or tablet. You can look around on a phone,
+         but tracing and furnishing need more room to work comfortably.</p>
+      <button id="ssn-dismiss" class="file-btn">Got it</button>
+    </div>
+  </div>
 
   <script type="module" src="app.js"></script>
 </body>

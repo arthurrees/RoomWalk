@@ -19,8 +19,8 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping; // richer, less blown-out lo
 renderer.toneMappingExposure = 1.15;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x16171a);
-scene.fog = new THREE.Fog(0x16171a, 60, 250);
+scene.background = new THREE.Color(0x181b22);
+scene.fog = new THREE.Fog(0x181b22, 60, 250);
 
 const ORBIT_FOV = 50;
 const WALK_FOV = 75;
@@ -383,7 +383,10 @@ export function rebuild() {
   for (const w of state.walls) {
     const wallGhost = w.hidden;
     const openings = state.openings.filter(o => o.wallId === w.id);
-    const segments = buildWallSegments(w, openings, wallHeight);
+    // Cut the wall for EVERY opening lying along it (not just its assigned host),
+    // so a wall placed over an existing door/window is still cut by it — a wall can
+    // never hide an opening. Panes/jambs/proxies stay with the host (no dupes).
+    const segments = buildWallSegments(w, openingsAlongWall(w), wallHeight);
     for (const seg of segments) {
       const mesh = buildWallSegmentMesh(w, seg);
       if (mesh) { if (wallGhost) makeGhost(mesh); sceneRoot.add(mesh); }
@@ -702,8 +705,8 @@ const _ray = new THREE.Raycaster();
 const _ndc = new THREE.Vector2();
 const _floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const _hitPt = new THREE.Vector3();
-const ghostMat = new THREE.MeshStandardMaterial({ color: 0xffd2d4, transparent: true, opacity: 0.45, depthWrite: false });
-const matHandle = new THREE.MeshBasicMaterial({ color: 0xff3b43, depthTest: false });
+const ghostMat = new THREE.MeshStandardMaterial({ color: 0xc7d6f8, transparent: true, opacity: 0.45, depthWrite: false });
+const matHandle = new THREE.MeshBasicMaterial({ color: 0x5b8def, depthTest: false });
 const HANDLE_R = 0.5; // ft
 
 let ghost = null;          // { type, rot, group }
@@ -829,7 +832,7 @@ function buildOpeningProxy(o) {
   const wall = state.walls.find(w => w.id === o.wallId);
   if (!wall) return null;
   const sel = state.selection?.kind === 'opening' && state.selection.id === o.id;
-  const mat = new THREE.MeshBasicMaterial({ color: 0xff3b43, transparent: true, opacity: sel ? 0.16 : 0.0, depthWrite: false });
+  const mat = new THREE.MeshBasicMaterial({ color: 0x5b8def, transparent: true, opacity: sel ? 0.16 : 0.0, depthWrite: false });
   const ry = -wallAngle(wall);
   const depth = WALL_THICKNESS_FT + 0.1;
 
@@ -1078,6 +1081,30 @@ document.addEventListener('pointerup', (e) => {
     }
   }
 });
+
+// Every opening lying ALONG wall w — its own (wallId === w.id) plus any hosted on
+// another collinear, same-orientation wall that overlaps w — each with t expressed
+// relative to w. So a wall drawn over an existing opening still gets cut by it.
+function openingsAlongWall(w) {
+  const wdx = w.x2 - w.x1, wdy = w.y2 - w.y1;
+  const wlen2 = wdx * wdx + wdy * wdy || 1;
+  const wHoriz = Math.abs(wdx) >= Math.abs(wdy);
+  const TOL = 18; // px from the wall line still counts as "on" it
+  const out = [];
+  for (const o of state.openings) {
+    if (o.wallId === w.id) { out.push(o); continue; }
+    const host = state.walls.find(x => x.id === o.wallId);
+    if (!host) continue;
+    const hdx = host.x2 - host.x1, hdy = host.y2 - host.y1;
+    if ((Math.abs(hdx) >= Math.abs(hdy)) !== wHoriz) continue; // only same-orientation walls
+    const cx = host.x1 + hdx * o.t, cy = host.y1 + hdy * o.t;
+    const u = ((cx - w.x1) * wdx + (cy - w.y1) * wdy) / wlen2;
+    if (u < 0 || u > 1) continue;
+    if (Math.hypot(cx - (w.x1 + u * wdx), cy - (w.y1 + u * wdy)) > TOL) continue; // not on this wall
+    out.push({ ...o, t: u });
+  }
+  return out;
+}
 
 function buildWallSegments(wall, openings, wallHeight) {
   const lenFt = px2ft(wallLengthPx(wall));

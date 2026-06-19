@@ -36,6 +36,7 @@ export const state = {
   paletteOpen: false,    // Items palette visibility — independent of tool so it
                          // can stay open across drops (tool auto-returns to Pan
                          // after each placement) until the user explicitly closes it
+  debugDetect: false,    // draw the ML detection overlay (raw boxes + attach/bridge/drop decisions)
 };
 
 const listeners = new Set();
@@ -137,6 +138,28 @@ export function setDetectedOpenings(items) {
   emit();
 }
 
+// Place ML-detected doors/windows. Two item shapes:
+//   • { type, wallId, t, widthFt }            → attach to an EXISTING wall
+//   • { type, bridge, x1,y1,x2,y2, widthFt }  → drop a short bridge wall at that
+//     span and put the opening on it (for openings whose host wall wasn't detected)
+// Either way 3D segments a real hole. Idempotent: a prior auto/ML run's openings +
+// auto bridge walls are cleared first.
+export function setMLOpenings(items) {
+  state.walls = state.walls.filter(w => !w.auto);
+  state.openings = state.openings.filter(o => !o.auto);
+  for (const it of items) {
+    if (it.bridge) {
+      const w = { id: id(), x1: it.x1, y1: it.y1, x2: it.x2, y2: it.y2, auto: true, bridge: true };
+      state.walls.push(w);
+      state.openings.push({ id: id(), type: it.type, wallId: w.id, t: 0.5, width: it.widthFt, auto: true });
+    } else if (state.walls.some(w => w.id === it.wallId)) {
+      state.openings.push({ id: id(), type: it.type, wallId: it.wallId, t: it.t, width: it.widthFt, auto: true });
+    }
+  }
+  state.selection = null;
+  emit();
+}
+
 // Hide/show the selected wall, opening, or furniture. Hidden objects lose
 // collision and render see-through (a low-opacity "ghost" in 3D/Walk, faint in
 // 2D) so you can look past them yet still see them and click to unhide.
@@ -199,6 +222,127 @@ export function replaceWalls(walls) {
   state.openings = [];
   state.selection = null;
   emit();
+}
+
+// Place auto-detected structural walls WITHOUT discarding existing doors/windows.
+// New walls replace the previous structural walls, but every existing opening is
+// RE-HOMED onto the nearest matching-orientation new wall (so the real wall
+// segments around it — no wall is drawn over the door); an opening keeps its old
+// host (a bridge) only when no new wall lands where it sits. This lets the user
+// detect doors/windows FIRST and then walls without losing or covering them.
+export function setDetectedWalls(walls) {
+  const newWalls = walls.map(w => ({ id: id(), x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2 }));
+  const oldById = new Map(state.walls.map(w => [w.id, w]));
+  const keepOldIds = new Set();
+  const TOL = 24; // px — an opening adopts a new wall only if it sits on its line
+  for (const o of state.openings) {
+    const host = oldById.get(o.wallId);
+    if (!host) continue;
+    const cx = host.x1 + (host.x2 - host.x1) * o.t;
+    const cy = host.y1 + (host.y2 - host.y1) * o.t;
+    const openHoriz = Math.abs(host.x2 - host.x1) >= Math.abs(host.y2 - host.y1);
+    // Candidate new walls of matching orientation that the opening actually falls
+    // WITHIN (not clamped past an end), nearest first.
+    const cands = [];
+    for (const w of newWalls) {
+      if ((Math.abs(w.x2 - w.x1) >= Math.abs(w.y2 - w.y1)) !== openHoriz) continue; // orientation
+      const dx = w.x2 - w.x1, dy = w.y2 - w.y1, L2 = dx * dx + dy * dy || 1;
+      const uRaw = ((cx - w.x1) * dx + (cy - w.y1) * dy) / L2;
+      if (uRaw < -0.05 || uRaw > 1.05) continue; // opening sits beyond this wall's span
+      const u = Math.max(0, Math.min(1, uRaw));
+      const d = Math.hypot(cx - (w.x1 + u * dx), cy - (w.y1 + u * dy));
+      cands.push({ w, u, d });
+    }
+    cands.sort((a, b) => a.d - b.d);
+    const best = cands[0], second = cands[1];
+    // Attach the opening to a new wall when either it PLAINLY lies on one (tiny
+    // distance — adopt the nearest even if a parallel face is right behind it, e.g. the
+    // two edges of one wall), or one wall is unambiguously closer than the next. Else
+    // keep the bridge so the opening stays exactly where the detector placed it.
+    const onWall = best && best.d <= 7;
+    const unambiguous = best && (!second || second.d > best.d * 1.5 + 6);
+    if (best && best.d <= TOL && (onWall || unambiguous)) { o.wallId = best.w.id; o.t = best.u; }
+    else keepOldIds.add(host.id);
+  }
+  state.walls = [...newWalls, ...state.walls.filter(w => keepOldIds.has(w.id))];
+  healBridges(state.walls);
+  logHealState();
+  state.selection = null;
+  emit();
+}
+
+// Connect generated walls to a floating opening's bridge: a real wall whose END
+// lands near a bridge endpoint is snapped onto it, so the surrounding walls join
+// up to the door/window instead of leaving it an isolated "island" (which also
+// produces stray ceiling slivers in 3D). Only walls already CLOSE to the opening
+// are pulled in, so nothing stretches across the room.
+// Close the gap between a detected door/window and the walls around it, so NOTHING is
+// left floating. The DOOR/WINDOW IS THE SOURCE OF TRUTH — it never moves or resizes.
+// The walls accommodate it: for each door jamb (each end of a floating opening), the
+// nearest real wall is made to PASS THROUGH that jamb while staying axis-aligned —
+// nudge the wall's line onto the jamb (a small perpendicular shift) and extend the
+// wall's end along its own axis to reach it. Never an angle, and the opening is left
+// exactly where the model placed it.
+//   cost = shift (move the wall's line onto the jamb) + growth (extend the wall to it).
+// Both are capped so we only ever make the "wall drawn a touch short / a few px off"
+// correction — a wall never travels across the room to chase a door.
+function healBridges(walls) {
+  const bridges = walls.filter(w => w.bridge);
+  if (!bridges.length) return;
+  // Only real, AXIS-ALIGNED walls can heal — nudging/extending a diagonal wall would
+  // only worsen the diagonal, so those are left for manual cleanup.
+  const realWalls = walls.filter(w => !w.bridge
+    && (Math.abs(w.x2 - w.x1) <= 2 || Math.abs(w.y2 - w.y1) <= 2));
+  if (!realWalls.length) return;
+  const SHIFT_CAP = 18; // px — most a wall's line may slide sideways onto a jamb
+  const GROW_CAP = 26;  // px — most a wall may extend along its axis to reach a jamb
+  const SHIFT_PENALTY = 1.5; // a sideways nudge is slightly worse than a clean axial extend
+
+  // Extend a wall's nearer end out along its axis to a target coord — only when the
+  // target is past the wall's span (a no-op when the jamb already lies on the wall body).
+  const growX = (w, x) => {
+    if (x > Math.max(w.x1, w.x2)) { if (w.x1 >= w.x2) w.x1 = x; else w.x2 = x; }
+    else if (x < Math.min(w.x1, w.x2)) { if (w.x1 <= w.x2) w.x1 = x; else w.x2 = x; }
+  };
+  const growY = (w, y) => {
+    if (y > Math.max(w.y1, w.y2)) { if (w.y1 >= w.y2) w.y1 = y; else w.y2 = y; }
+    else if (y < Math.min(w.y1, w.y2)) { if (w.y1 <= w.y2) w.y1 = y; else w.y2 = y; }
+  };
+  const spanGap = (v, lo, hi) => v < lo ? lo - v : v > hi ? v - hi : 0; // px past a span
+
+  for (const b of bridges) {
+    for (const bk of ['1', '2']) {
+      const bx = b['x' + bk], by = b['y' + bk]; // a door/window jamb — FIXED
+      // Find the wall that can pass through (bx,by) for the least movement. A wall is
+      // made axis-aligned-through-the-jamb either way: a horizontal wall needs y→by and
+      // its end out to x=bx; a vertical wall needs x→bx and its end out to y=by.
+      let best = null, bestCost = SHIFT_CAP + GROW_CAP;
+      for (const w of realWalls) {
+        const wHoriz = Math.abs(w.x2 - w.x1) >= Math.abs(w.y2 - w.y1);
+        const shift  = wHoriz ? Math.abs((w.y1 + w.y2) / 2 - by) : Math.abs((w.x1 + w.x2) / 2 - bx);
+        const growth = wHoriz ? spanGap(bx, Math.min(w.x1, w.x2), Math.max(w.x1, w.x2))
+                              : spanGap(by, Math.min(w.y1, w.y2), Math.max(w.y1, w.y2));
+        if (shift > SHIFT_CAP || growth > GROW_CAP) continue; // too far to be "its" wall
+        const cost = SHIFT_PENALTY * shift + growth;
+        if (cost < bestCost) { best = { w, wHoriz }; bestCost = cost; }
+      }
+      if (!best) continue;
+      const { w, wHoriz } = best; // accommodate the door: wall passes through the jamb
+      if (wHoriz) { w.y1 = w.y2 = by; growX(w, bx); }
+      else        { w.x1 = w.x2 = bx; growY(w, by); }
+    }
+  }
+}
+
+const HEAL_DEBUG = false; // set true to log walls/bridges after detect-walls (diagnostic)
+function logHealState() {
+  if (!HEAL_DEBUG || typeof console === 'undefined') return;
+  const cls = w => Math.abs(w.x2 - w.x1) < 2 ? 'V' : Math.abs(w.y2 - w.y1) < 2 ? 'H' : 'DIAG';
+  const fmt = w => `${cls(w)}\t(${w.x1 | 0},${w.y1 | 0})-(${w.x2 | 0},${w.y2 | 0})`;
+  const bridges = state.walls.filter(w => w.bridge), real = state.walls.filter(w => !w.bridge);
+  console.log(`[HEAL] ${real.length} walls, ${bridges.length} bridges\n` +
+    'BRIDGES (door/window carriers):\n' + bridges.map(fmt).join('\n') +
+    '\nWALLS:\n' + real.map(fmt).join('\n'));
 }
 
 export function clearOpenings() {

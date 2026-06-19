@@ -1,16 +1,18 @@
 :root {
-  /* ThinkPad-inspired: matte graphite chassis, single red accent */
-  --bg: #16171a;
-  --panel: #1b1c1f;
-  --panel-2: #232427;
-  --border: #303134;
-  --text: #e6e7ea;
-  --muted: #9a9da3;
-  --accent: #e2232a;       /* ThinkPad red */
-  --accent-2: #ff3b43;     /* bright red (hover/selection) */
-  --danger: #ff5c66;
-  --good: #4ade80;
-  --shadow: 0 8px 24px rgba(0,0,0,.45);
+  /* Foundry workspace: cool navy-charcoal chassis, single blue accent
+     (matched to the FORWARD ops console). */
+  --bg: #181b22;
+  --panel: #1f232c;
+  --panel-2: #272c37;
+  --border: #2a2f3a;
+  --text: #dfe3ea;
+  --muted: #828b98;
+  --accent: #2f5fe0;       /* Foundry blue */
+  --accent-2: #5b8def;     /* brighter blue (hover/selection) */
+  --danger: #f0617f;       /* rose — kept distinct from the blue accent */
+  --good: #3ddc84;
+  --shadow: 0 8px 24px rgba(8,12,24,.5);
+  --glass: rgba(24,27,34,.95);   /* floating panels/pills over the canvas */
 }
 
 * { box-sizing: border-box; }
@@ -82,6 +84,11 @@ body {
 .help-section li { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 5px; }
 .help-section li:last-child { margin-bottom: 0; }
 .help-section b { color: var(--text); font-weight: 600; }
+.help-section a { color: var(--accent); text-decoration: none; }
+.help-section a:hover { text-decoration: underline; }
+.help-section.credits h4 { color: var(--muted); font-size: 12px; }
+.keys-list { list-style: none; padding-left: 2px; margin-top: 2px; }
+.keys-list li { margin-bottom: 7px; }
 .help-menu kbd {
   display: inline-block;
   font-family: inherit;
@@ -303,7 +310,7 @@ button.danger { color: var(--danger); }
 .stage {
   position: relative;
   overflow: hidden;
-  background: #16171a;
+  background: var(--bg);
 }
 
 .palette {
@@ -313,7 +320,7 @@ button.danger { color: var(--danger); }
   bottom: 0;
   width: 210px;
   z-index: 6;
-  background: rgba(22,23,26,.96);
+  background: var(--glass);
   border-right: 1px solid var(--border);
   box-shadow: var(--shadow);
   display: flex;
@@ -361,7 +368,7 @@ button.danger { color: var(--danger); }
   cursor: pointer;
 }
 .palette-item:hover { border-color: var(--accent); }
-.palette-item.armed { border-color: var(--accent); background: rgba(226,35,42,.14); }
+.palette-item.armed { border-color: var(--accent); background: rgba(47,95,224,.18); }
 .palette-item .dim { font-size: 10px; color: var(--muted); }
 
 .item-panel {
@@ -371,7 +378,7 @@ button.danger { color: var(--danger); }
   transform: translateX(-50%);
   z-index: 8;
   max-width: 92vw;
-  background: rgba(22,23,26,.95);
+  background: var(--glass);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 10px 14px;
@@ -408,7 +415,7 @@ button.danger { color: var(--danger); }
   top: 14px;
   right: 14px;
   z-index: 5;
-  background: rgba(22,23,26,.88);
+  background: var(--glass);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px 12px;
@@ -435,20 +442,21 @@ button.danger { color: var(--danger); }
 }
 .view.active { display: block; }
 
-canvas { display: block; width: 100%; height: 100%; }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
 .hint {
   position: absolute;
   bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(0,0,0,.55);
+  background: var(--glass);
   border: 1px solid var(--border);
   padding: 6px 12px;
   border-radius: 999px;
   font-size: 12px;
   color: var(--muted);
   pointer-events: none;
+  backdrop-filter: blur(3px);
 }
 
 .tool-tip {
@@ -457,7 +465,7 @@ canvas { display: block; width: 100%; height: 100%; }
   left: 50%;
   transform: translateX(-50%);
   z-index: 7;
-  background: rgba(22,23,26,.95);
+  background: var(--glass);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 9px 34px 9px 14px;
@@ -539,7 +547,8 @@ canvas { display: block; width: 100%; height: 100%; }
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(0,0,0,.6);
+  background: var(--glass);
+  border: 1px solid var(--border);
   padding: 6px 12px;
   border-radius: 999px;
   font-size: 12px;
@@ -559,7 +568,7 @@ canvas { display: block; width: 100%; height: 100%; }
 }
 .walk-paused-card {
   text-align: center;
-  background: rgba(22,26,34,.9);
+  background: var(--glass);
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 22px 34px;
@@ -621,3 +630,54 @@ canvas { display: block; width: 100%; height: 100%; }
   z-index: 30;
   box-shadow: var(--shadow);
 }
+
+/* ---------- Responsive / touch ---------- */
+
+/* Tablet & narrow desktop: let the packed top bar wrap instead of overflowing,
+   and give buttons bigger tap targets. The grid layout (toolbar + stage) is
+   unchanged — only the chrome relaxes. */
+@media (max-width: 1024px) {
+  body { grid-template-rows: auto 1fr; }
+  .topbar {
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    padding: 8px 12px;
+  }
+  .brand-group { flex-wrap: wrap; }
+  .topbar-right { flex-wrap: wrap; justify-content: flex-end; }
+  .esc-hint { display: none; }              /* keyboard-only hint, irrelevant on touch */
+  /* Roomier hit targets for fingers. */
+  .tool { padding: 10px 4px; }
+  button.ghost { padding: 9px 13px; }
+  .dropdown-menu button, .dropdown-menu .row { padding: 11px 12px; }
+  .palette-item { padding: 10px 12px; }
+  .ip-dim button { width: 30px; height: 30px; }
+  /* Dropdowns can outgrow a short screen once the bar wraps — let them scroll. */
+  .dropdown-menu { max-height: 70vh; overflow-y: auto; }
+}
+
+/* Phone-sized: keep it usable for looking around, but surface a one-time note
+   that the editor wants a bigger screen. */
+.smallscreen-note {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(10, 11, 13, 0.82);
+  backdrop-filter: blur(4px);
+}
+.smallscreen-note[hidden] { display: none; }
+.ssn-card {
+  max-width: 320px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px 20px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+.ssn-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+.ssn-card p { font-size: 13px; color: var(--muted); line-height: 1.5; margin: 0 0 16px; }

@@ -2,9 +2,9 @@
 import {
   state, subscribe, emit, setTool, setView, setScale, resetAll, reseedIds,
   clearWalls, clearOpenings, clearFurniture, deleteSelection, armFurniture,
-  replaceWalls, setDetectedOpenings, toggleHidden, showAllHidden, closePalette,
+  replaceWalls, setDetectedWalls, setMLOpenings, toggleHidden, showAllHidden, closePalette,
 } from './state.js';
-import { detectWalls, detectOpenings } from './detect.js';
+import { detectWalls, detectWallsML, detectDoorsWindowsML } from './detect.js';
 import { wallLengthPx, parseLength, formatLength, formatArea, FT_PER_M, PX_PER_FT_FALLBACK } from './geom.js';
 import { CATALOG, CATEGORIES, getItem, applyResize, sizeNote, bedSizeName } from './furniture.js';
 import { resolveAgainstWalls } from './collision.js';
@@ -19,6 +19,15 @@ viewBtns.forEach(btn => {
     switchView(v);
   });
 });
+
+// Walk mode needs mouse-look + WASD, which touch has no equivalent for yet (no on-screen
+// controls). On touch-primary devices (tablets/phones, primary pointer = coarse) hide the
+// Walk toggle so users don't land in a view they can't navigate. Touch laptops keep it,
+// since their primary pointer is fine (trackpad/mouse) and they have a keyboard.
+const TOUCH_PRIMARY = window.matchMedia('(pointer: coarse)').matches;
+if (TOUCH_PRIMARY) {
+  viewBtns.forEach(b => { if (b.dataset.view === 'walk') b.hidden = true; });
+}
 
 function switchView(v) {
   if (state.view === v) return;
@@ -40,6 +49,17 @@ function switchView(v) {
     view3d.rebuild();
     view3d.enterWalk();
   }
+  syncToolsToView(v);
+}
+
+// Wall/door/window placement only works in 2D — hide those tools in 3D/Walk, and drop
+// back to Pan if one of them was the active tool when leaving 2D.
+const VIEW_2D_ONLY_TOOLS = ['wall', 'door', 'window'];
+function syncToolsToView(v) {
+  toolBtns.forEach(b => {
+    if (VIEW_2D_ONLY_TOOLS.includes(b.dataset.tool)) b.hidden = (v !== '2d');
+  });
+  if (v !== '2d' && VIEW_2D_ONLY_TOOLS.includes(state.tool)) setTool('pan');
 }
 
 // --- Tool buttons ---
@@ -49,6 +69,7 @@ toolBtns.forEach(btn => {
     setTool(btn.dataset.tool);
   });
 });
+syncToolsToView(state.view); // initial (app starts in 2D)
 
 // --- Furniture palette ---
 const paletteBody = document.getElementById('palette-body');
@@ -229,6 +250,28 @@ document.addEventListener('click', (e) => {
   if (!helpMenu.contains(e.target) && e.target !== helpBtn) helpMenu.hidden = true;
 });
 
+// --- Design dropdown ---
+const designBtn = document.getElementById('design-btn');
+const designMenu = document.getElementById('design-menu');
+designBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  designMenu.hidden = !designMenu.hidden;
+});
+document.addEventListener('click', (e) => {
+  if (!designMenu.contains(e.target) && e.target !== designBtn) designMenu.hidden = true;
+});
+
+// --- Keyboard-shortcuts dropdown ---
+const keysBtn = document.getElementById('keys-btn');
+const keysMenu = document.getElementById('keys-menu');
+keysBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  keysMenu.hidden = !keysMenu.hidden;
+});
+document.addEventListener('click', (e) => {
+  if (!keysMenu.contains(e.target) && e.target !== keysBtn) keysMenu.hidden = true;
+});
+
 // --- Save / Open project ---
 const saveBtn = document.getElementById('save-btn');
 const openBtn = document.getElementById('open-btn');
@@ -293,7 +336,7 @@ function applyProject(data, doneMsg = 'Project loaded.') {
   state.scale = data.scale ?? null;
   state.wallHeightFt = data.wallHeightFt ?? 9;
   state.imageOpacity = data.imageOpacity ?? 0.85;
-  state.outlineMode = data.outlineMode ?? true;
+  state.outlineMode = true;                           // always render the extracted blueprint (transparent bg); no toggle
   state.outlineThreshold = data.outlineThreshold ?? 120;
   state.grid = data.grid ?? false;
   state.floorStyle = data.floorStyle || 'wood';
@@ -313,11 +356,7 @@ function applyProject(data, doneMsg = 'Project loaded.') {
   // sync UI controls to the loaded state
   unitsSelect.value = state.units; syncUnitsUI(); buildPalette();
   opacitySlider.value = Math.round(state.imageOpacity * 100);
-  outlineToggle.checked = state.outlineMode;
-  outlineThreshold.value = state.outlineThreshold;
   gridToggle.checked = state.grid;
-  floorStyleSel.value = state.floorStyle;
-  wallColorInput.value = state.wallColor;
 
   const finish = () => {
     if (state.view !== '2d') switchView('2d');
@@ -377,8 +416,6 @@ function applySnapshot(snap) {
   reseedIds();
   unitsSelect.value = state.units; syncUnitsUI(); buildPalette();
   gridToggle.checked = state.grid;
-  floorStyleSel.value = state.floorStyle;
-  wallColorInput.value = state.wallColor;
   emit();
   applyingHistory = false;
 }
@@ -457,9 +494,8 @@ advMenu.querySelectorAll('button[data-action]').forEach(b => {
     advMenu.hidden = true;
     if (a === 'set-scale') startSetScale();
     else if (a === 'calibrate-sqft') openCalibrateSqft();
-    else if (a === 'calibrate-distance') openCalibrateDistance();
-    else if (a === 'detect-walls') runDetectWalls();
-    else if (a === 'detect-openings') runDetectOpenings();
+    else if (a === 'detect-walls-ml') runDetectWallsML();
+    else if (a === 'detect-dw-ml') runDetectDoorsWindowsML();
     else if (a === 'clear-walls') { clearWalls(); toast('Walls cleared'); }
     else if (a === 'clear-openings') { clearOpenings(); toast('Doors/windows cleared'); }
     else if (a === 'clear-furniture') { clearFurniture(); toast('Furniture cleared'); }
@@ -468,53 +504,52 @@ advMenu.querySelectorAll('button[data-action]').forEach(b => {
   });
 });
 
-// Auto-detect walls from the uploaded plan. Replaces the current wall set;
-// the user reviews and fixes with the Wall tool, or "Clear walls" to redo
-// manually if the plan didn't detect cleanly (thin double-line plans won't).
-function runDetectWalls() {
+// ML wall detection (on-device ONNX), lazy-loaded on first use; the heuristic
+// detector is the fallback. Re-runnable (replaces the wall set). Detect walls
+// FIRST, fix any with the Wall tool, then detect doors & windows — the openings
+// snap onto whatever walls exist, so better walls give better door placement.
+async function runDetectWallsML() {
   if (!state.image?.el) { toast('Upload a floor plan first.'); return; }
-  toast('Detecting walls…');
-  // Defer so the toast paints before the synchronous detection pass runs.
-  setTimeout(() => {
-    let walls = [];
-    try { walls = detectWalls(state.image.el); }
-    catch (err) { console.error(err); toast('Wall detection failed. Trace manually with the Wall tool.', 4000); return; }
-    if (!walls.length) {
-      toast('Couldn’t auto-detect walls on this plan. Trace them manually with the Wall tool.', 4500);
-      return;
-    }
-    replaceWalls(walls);
-    if (state.view !== '2d') switchView('2d');
-    const n = walls.length;
-    toast(`Detected ${n} wall${n === 1 ? '' : 's'}. Review and fix with the Wall tool, or Clear walls to redo manually.`, 5000);
-  }, 30);
-}
-
-// Auto-detect doors & windows in the gaps between the current walls. Doors get
-// a swing arc in the plan, windows have glass lines; gaps with neither are left
-// open. Re-runnable (replaces a previous detection's openings).
-function runDetectOpenings() {
-  if (!state.image?.el) { toast('Upload a floor plan first.'); return; }
-  if (state.walls.length < 2) {
-    toast('Detect or draw walls first. Doors & windows sit in the gaps between them.', 4500);
+  toast('Detecting walls… (first run downloads the model)', 6000);
+  let walls = [];
+  try { walls = await detectWallsML(state.image.el); }
+  catch (err) { console.error(err); }
+  if (!walls.length) {
+    try { walls = detectWalls(state.image.el); } catch (err) { console.error(err); }
+  }
+  if (!walls.length) {
+    toast('Couldn’t detect walls on this plan. Trace them with the Wall tool.', 5000);
     return;
   }
-  toast('Detecting doors & windows…');
-  setTimeout(() => {
-    const pxPerFt = state.scale ?? PX_PER_FT_FALLBACK;
-    let items = [];
-    try { items = detectOpenings(state.image.el, state.walls, { pxPerFt }); }
-    catch (err) { console.error(err); toast('Detection failed. Place doors/windows manually.', 4000); return; }
-    if (!items.length) {
-      toast('No doors or windows detected. Add them with the Door/Window tools.', 4500);
-      return;
-    }
-    setDetectedOpenings(items);
-    if (state.view !== '2d') switchView('2d');
-    const d = items.filter(i => i.type === 'door').length;
-    const w = items.length - d;
-    toast(`Detected ${d} door${d === 1 ? '' : 's'} and ${w} window${w === 1 ? '' : 's'}. Adjust or delete any with the Pan tool.`, 5000);
-  }, 30);
+  setDetectedWalls(walls);   // preserves & re-homes any existing doors/windows
+  if (state.view !== '2d') switchView('2d');
+  const n = walls.length;
+  const kept = state.openings.length;
+  toast(`Detected ${n} wall${n === 1 ? '' : 's'} (beta)${kept ? `, kept ${kept} door/window${kept === 1 ? '' : 's'}` : ''}. Fix with the Wall tool.`, 5000);
+}
+
+// ML door/window detection (on-device ONNX). Runs against the CURRENT walls and
+// snaps each detection onto the nearest same-orientation wall, so detect/trace
+// (and fix) walls first for the best placement. Re-runnable (replaces a prior run).
+async function runDetectDoorsWindowsML() {
+  if (!state.image?.el) { toast('Upload a floor plan first.'); return; }
+  toast('Detecting doors & windows… (first run downloads the model)', 6000);
+  // Detect doors/windows ONLY — never touches walls. If walls already exist, an
+  // opening snaps onto a matching one (clean 3D hole); otherwise it's placed where
+  // the model found it (like the spike). So this works with or without walls.
+  const walls = state.walls.filter(w => !w.auto);
+  const pxPerFt = state.scale ?? PX_PER_FT_FALLBACK;
+  let items = [];
+  try { items = await detectDoorsWindowsML(state.image.el, walls, { pxPerFt }); }
+  catch (err) { console.error(err); toast('Door/window detection failed. Place them manually.', 4000); return; }
+  if (!items.length) {
+    toast('No doors or windows found on the walls. Add them with the Door/Window tools.', 4500);
+    return;
+  }
+  setMLOpenings(items);
+  if (state.view !== '2d') switchView('2d');
+  const dN = items.filter(i => i.type === 'door').length, wN = items.length - dN;
+  toast(`Detected ${dN} door${dN === 1 ? '' : 's'} and ${wN} window${wN === 1 ? '' : 's'} (beta). Adjust with the Pan tool.`, 5000);
 }
 
 // Opacity slider
@@ -524,12 +559,6 @@ opacitySlider.addEventListener('input', () => {
   emit();
 });
 
-// Floor material + wall colour (whole-home 3D styling)
-const floorStyleSel = document.getElementById('floor-style');
-const wallColorInput = document.getElementById('wall-color');
-floorStyleSel.addEventListener('change', () => { state.floorStyle = floorStyleSel.value; emit(); });
-wallColorInput.addEventListener('input', () => { state.wallColor = wallColorInput.value; emit(); });
-
 // Snap-to-grid toggle (1-ft build grid)
 const gridToggle = document.getElementById('grid-mode');
 gridToggle.addEventListener('change', () => {
@@ -538,23 +567,31 @@ gridToggle.addEventListener('change', () => {
   emit();
 });
 
-// Blueprint outline toggle
-const outlineToggle = document.getElementById('outline-mode');
-outlineToggle.addEventListener('change', () => {
-  state.outlineMode = outlineToggle.checked;
+// Detection debug overlay toggle (draws ML door/window boxes + placement decisions).
+// Dev-only: the row is hidden in the public build and revealed on localhost or with
+// `?debug` in the URL, so it never ships to ordinary visitors.
+const debugToggle = document.getElementById('debug-detect');
+const debugRow = document.getElementById('debug-detect-row');
+const isDevHost = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+if (isDevHost || new URLSearchParams(location.search).has('debug')) {
+  debugRow.hidden = false;
+}
+debugToggle.addEventListener('change', () => {
+  state.debugDetect = debugToggle.checked;
   emit();
 });
 
-// Outline detail (luminance threshold) — reprocess current image.
-const outlineThreshold = document.getElementById('outline-threshold');
-outlineThreshold.addEventListener('input', () => {
-  state.outlineThreshold = parseInt(outlineThreshold.value, 10);
-  if (state.image?.el) {
-    state.image.outline = view2d.buildOutline(state.image.el, state.outlineThreshold);
-  }
-  emit();
-});
-
+// Small-screen heads-up: on phone-width viewports, show a one-time note that the
+// editor works best on a larger screen. Dismissed-forever like the tool tips.
+const ssn = document.getElementById('smallscreen-note');
+if (ssn && window.matchMedia('(max-width: 640px)').matches
+    && localStorage.getItem('roomwalk.smallscreen-dismissed') !== '1') {
+  ssn.hidden = false;
+  document.getElementById('ssn-dismiss').addEventListener('click', () => {
+    ssn.hidden = true;
+    localStorage.setItem('roomwalk.smallscreen-dismissed', '1');
+  });
+}
 // Wall height (input shown in the current unit; stored in feet)
 const heightInput = document.getElementById('wall-height');
 const heightLabel = document.getElementById('wall-height-label');
@@ -867,9 +904,9 @@ window.addEventListener('keydown', (e) => {
   // While walking, WASD belongs to the player — don't trigger tool shortcuts.
   if (state.view !== 'walk') {
     if (k === 'v') setTool('pan');
-    else if (k === 'w') setTool('wall');
-    else if (k === 'd') setTool('door');
-    else if (k === 'r') setTool('window');
+    else if (k === 'w' && state.view === '2d') setTool('wall');   // wall/door/window are 2D-only
+    else if (k === 'd' && state.view === '2d') setTool('door');
+    else if (k === 'r' && state.view === '2d') setTool('window');
     else if (k === 'i') setTool('furniture');
   }
   if (k === 'delete' || k === 'backspace') {
@@ -882,7 +919,7 @@ window.addEventListener('keydown', (e) => {
     if (changed) emit();
   } else if (k === '1') switchView('2d');
   else if (k === '2') switchView('3d');
-  else if (k === '3') switchView('walk');
+  else if (k === '3' && !TOUCH_PRIMARY) switchView('walk');
 });
 
 // --- Selection panel (resize / rotate / delete in any view) ---

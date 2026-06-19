@@ -36,10 +36,11 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
 |------|----------------|
 | `index.html` | Layout: top bar, toolbar, sectioned Advanced dropdown, How-to guide, palette, readout/selection panels, three.js import map |
 | `styles.css` | ThinkPad-inspired theme (see Theme below) |
-| `state.js` | Central `state` object + `subscribe`/`emit`; mutators (addWall, addOpening, addFurniture, setScale, replaceWalls, setDetectedOpenings, `closePalette`, etc.); `state.paletteOpen` is independent of `state.tool`; `reseedIds()` after load |
+| `state.js` | Central `state` object + `subscribe`/`emit`; mutators (addWall, addOpening, addFurniture, setScale, replaceWalls, **setDetectedWalls** (preserves+re-homes openings onto new walls, then `healBridges` connects nearby wall ends to floating opening bridges), setDetectedOpenings, **setMLOpenings** (attach-or-bridge), `closePalette`, etc.); `state.paletteOpen` is independent of `state.tool`; `reseedIds()` after load |
 | `geom.js` | Pure geometry helpers; unit format/parse; SAT OBB overlap (`obbOverlapMTV`); gap detection (`findGap`); shared constants |
 | `furniture.js` | Dependency-free catalog (real dims in feet) incl. wall-mounted items (`mount:'wall'`, `mountH`) + resize metadata + `unitCount`/`applyResize`/`sizeNote` |
-| `detect.js` | Dependency-free CV: `detectWalls` (threshold → thick-band extraction) and `detectOpenings` (gap classification: light-glass ⇒ window, narrow empty ⇒ door) |
+| `detect.js` | Wall/opening detection. **Heuristic (dependency-free):** `detectWalls` (threshold → thick-band extraction) + `detectOpenings` (gap classification). **On-device ML (ONNX Runtime Web):** `detectWallsML` (U-Net mask → reuses `wallsFromMask`) + `detectDoorsWindowsML` (YOLOv8n → boxes snapped to same-orientation walls). Heuristic stays as fallback. `DW_DEBUG` logs door placement decisions. |
+| `vendor/ort/` · `models/` | Vendored ONNX Runtime Web (WASM, single-thread) + the two `.onnx` models (`walls-v1`, `doors-v2`). Lazy-loaded on first ML use; cache-immutable in `_headers`. Models are trained OUTSIDE this repo — see **`C:\Users\arthu\roomwalk-ml\REFINING.md`**. |
 | `pdf.js` | Lazy-loads vendored PDF.js and renders an uploaded PDF page to a PNG data URL so the same image pipeline takes over (`isPdfFile`, `renderPdfToImage`) |
 | `collision.js` | Furniture↔wall overlap (`resolveAgainstWalls`), gap auto-fit (`fitBetweenWalls`), wall-item snapping (`snapToWall`/`wallSnapPose`), `isClipping`/`recomputeClips` |
 | `view2d.js` | 2D canvas: image/outline, world grid, pan/zoom, wall draw + snap, openings, furniture, scale pick. Renders on `subscribe(draw)` |
@@ -63,8 +64,10 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
   first PDF upload) and then go through the same image pipeline; multi-page PDFs
   prompt for the page. The plan is processed so dark lines → light graphite, white
   bg → transparent. Toggle + detail (threshold) + opacity in Advanced.
-- **Wall tracing.** Click two points; endpoint snap + horizontal/vertical axis
-  snap. Walls render as bright accent strokes.
+- **Wall tracing.** Click two points. The draft **straightens to H/V first**
+  (within ~10°, `AXIS_SNAP_DEG`) and snaps to an existing corner only if that corner
+  lies on the straightened line — so nearby wall endpoints (esp. after ML detection)
+  don't yank the wall crooked. Walls render as bright accent strokes.
 - **Auto-detect walls** (`Advanced → Detect walls`, `detect.js`). Threshold the
   image, keep only *thick long* strokes (rejects text/dimension lines via a
   min-band-thickness test), extract axis-aligned centerlines → `replaceWalls`.
@@ -72,10 +75,21 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
 - **Build from scratch.** `Start from scratch` (top bar) → a blank 1-ft world
   grid (`state.grid`); walls snap to it and scale is pre-set so dimensions are
   real-by-construction. Lets students with only a 3D/listing render rebuild a
-  clean plan. Toggle via `Advanced → Canvas → Snap to grid`.
+  clean plan. Toggle via `Advanced → Canvas → Snap to grid`. The grid + its snap
+  are **scratch-mode only** — they no-op when a blueprint image is loaded, so
+  tracing an uploaded plan stays fluid (only H/V axis-straightening applies).
 - **Doors / windows.** Place tool snaps to walls; select to move (middle) or
-  resize (end-thirds). 3D walls are *segmented* around openings (geometry
-  preserved, not transparent); doors brown, windows blue glass.
+  resize (end-thirds). In 2D, dragging the middle **free-moves** a floating
+  (bridge) opening (no auto-snap), and dragging an **end** moves that end freely,
+  **snapping it to the nearest wall ending/corner (~14px) or wall line (~12px)** so
+  you can fix a badly-generated door by hand. **On release, a floating opening that
+  now lies along a real wall (both ends within ~14px) attaches to that wall** so the
+  wall segments around it — fixes a window staying buried in solid wall ("won't pop
+  up" in 3D); never snaps from afar. Orphaned carrier bridges cleaned up on release.
+  3D walls are *segmented* around openings — **any wall an opening lies along is
+  cut, not just its assigned host** (`openingsAlongWall`), so a wall placed/drawn
+  over a door/window can't hide it; geometry preserved, not transparent. Doors
+  brown, windows blue glass.
 - **Gap-bridging openings.** Hover a door/window over an open gap between two
   collinear wall ends → it auto-fits, creating a short `bridge:true` wall it
   fills (deleting the opening reopens the gap).
@@ -84,6 +98,25 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
   gap ⇒ window (glass is often drawn lighter than walls, so a 2nd sensitive
   threshold catches it); a narrow empty gap ⇒ door; a wide empty gap ⇒ left open.
   Idempotent (re-running replaces prior auto openings, tagged `auto:true`).
+- **On-device ML detection** (`Advanced → ✨ Detect walls`, `✨ Detect doors &
+  windows`). Runs two ONNX models **in the browser** (ONNX Runtime Web, WASM —
+  no backend, works offline). Walls: a U-Net segmenter → wall mask → reuses the
+  heuristic band/snap vectorizer. Doors/windows: a YOLOv8n detector → boxes
+  snapped onto the nearest **same-orientation** wall and attached as openings, or
+  placed where the model found them (bridge) when no matching wall is there. A
+  cleanup pass filters the d/w model's noise: per-class confidence (door ≥0.25,
+  window ≥0.40), **oversized detections dropped** (> ~8–9 ft or > 35% of the plan —
+  kills wall/dimension lines misread as windows), and single doors standardized to
+  ~3 ft (`cleanWidthFt`/`DW_*` knobs at the top of `detect.js`). The
+  two buttons are **independent** — "Detect doors & windows" never detects walls;
+  it works standalone (placing openings at the detected spots, like the spike) and
+  uses your walls only if they already exist. "Detect walls" **preserves existing
+  openings** — `setDetectedWalls` re-homes each onto the nearest matching new wall
+  so the wall segments around it instead of covering it (order-free; recommended:
+  doors/windows first, then walls). The heuristic
+  detectors stay as the fallback. ~90% on walls, ~85% on doors/windows; dense
+  interior closet clusters need manual cleanup. Models are trained outside this
+  repo — see `C:\Users\arthu\roomwalk-ml\REFINING.md`.
 - **Scale calibration** (all converge on px/ft):
   1. **Set scale from a dimension** — click two points on the plan, type the real
      length. Clicks snap to the nearest drawn line; also axis-snap.
@@ -195,10 +228,14 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
 
 ## Theme
 
-ThinkPad-inspired: matte near-black (`#16171A`), graphite reference lines, single
-red accent **`#E2232A`** (selection `#FF3B43`). Doors brown, windows blue,
-furniture neutral slate, clip warnings red, scale-pick guide amber. 2D colors
-live in the `PAL` object at the top of `view2d.js`; UI colors in CSS `:root`.
+"Foundry workspace" — matched to the FORWARD ops console. Cool navy-charcoal
+chassis (`--bg` `#181B22`, `--panel` `#1F232C`, `--panel-2` `#272C37`, border
+`#2A2F3A`), single **Foundry blue** accent **`#2F5FE0`** (walls + chrome all use it;
+selection / grips use the brighter `#5B8DEF`). Danger is rose `#F0617F`
+(kept distinct from the blue accent). Doors brown, windows blue, furniture
+neutral slate, clip warnings red, scale-pick guide amber. 2D colors live in the
+`PAL` object at the top of `view2d.js`; UI colors in CSS `:root`; the 3D scene
+background/fog + selection handles live in `view3d.js`.
 
 ## Conventions / gotchas
 

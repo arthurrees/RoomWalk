@@ -17,6 +17,14 @@
 
 const MAX_DIM = 1000; // working-resolution cap; coords scale back to native px
 
+// Diagnostics for the in-app debug overlay (view2d reads this when
+// `state.debugDetect` is on). Populated by the ML detectors in NATIVE image px so
+// the 2D canvas can draw the raw model output + every placement decision on top of
+// the plan. Null until a detector has run.
+//   dw   — { records:[{type,conf, bx1,by1,bx2,by2 (raw box), decision, placeX,placeY
+//            (attach point) | bx1..by2 bridge seg, wallDist, tol}], natW, natH }
+export const detectDebug = { dw: null };
+
 // Rasterize + threshold the image and build the masks both detectors share:
 //   ink     — every dark stroke
 //   opened  — only the THICK strokes (walls), thin marks eroded away
@@ -63,15 +71,11 @@ function prepare(img) {
   return { W, H, scale, ink, opened, halfThick, gray, thr };
 }
 
-export function detectWalls(img) {
-  const prep = prepare(img);
-  if (!prep) return [];
-  const { W, H, scale, ink, halfThick } = prep;
-
-  // Extract bands straight from the ink, gated by band THICKNESS: a wall is a
-  // long run that is also several px thick. This rejects 1px dimension lines
-  // (too thin) and short text strokes (too short) WITHOUT eroding — erosion was
-  // wiping out genuinely thin walls. Lengths/thickness in working px.
+// Shared tail for BOTH detectors: a binary wall mask at working resolution (W×H)
+// + its scale back to native px + estimated half-thickness → wall centerlines in
+// native pixels. The Otsu heuristic and the ML model differ ONLY in how they
+// produce `ink`; everything below (band extraction, corner snapping) is identical.
+function wallsFromMask(ink, W, H, scale, halfThick) {
   const minLen = Math.max(10, Math.round(Math.min(W, H) * 0.04));
   const minThick = Math.max(2, Math.round(halfThick));
   const maxBandThick = Math.max(minThick + 2, Math.round(halfThick * 2 * 2.2));
@@ -79,14 +83,267 @@ export function detectWalls(img) {
     ...extractBands(ink, W, H, 'h', minLen, minThick, maxBandThick),
     ...extractBands(ink, W, H, 'v', minLen, minThick, maxBandThick),
   ];
-
-  // Scale back to native px + snap corners (~one wall thickness tolerance).
   const inv = 1 / scale;
   const walls = segs.map(s => ({
     x1: s.x1 * inv, y1: s.y1 * inv, x2: s.x2 * inv, y2: s.y2 * inv,
   }));
   const snapTol = Math.max(3, Math.round(halfThick * 2 * inv));
   return snapCorners(walls, snapTol);
+}
+
+// Estimate wall half-thickness from a binary mask (same approach prepare() uses).
+function halfThickOf(ink, W, H) {
+  const bgSeed = new Uint8Array(W * H);
+  for (let i = 0; i < ink.length; i++) bgSeed[i] = ink[i] ? 0 : 1;
+  const distToBg = chebyshev(W, H, bgSeed);
+  return Math.max(1, percentileOverInk(distToBg, ink, 0.90));
+}
+
+export function detectWalls(img) {
+  const prep = prepare(img);
+  if (!prep) return [];
+  // Otsu ink → the proven band/snap tail. Gated by band thickness so 1px
+  // dimension lines and short text strokes don't register as walls.
+  return wallsFromMask(prep.ink, prep.W, prep.H, prep.scale, prep.halfThick);
+}
+
+// --- ML wall detection (on-device). Lazy-loads the vendored ONNX runtime + model
+// only when first invoked (mirrors pdf.js); the heuristic above stays dependency-free
+// and is the guaranteed fallback. Output shape is identical to detectWalls():
+// [{ x1, y1, x2, y2 }] in native pixels, so callers/state are unchanged.
+const ML_MODEL_URL = '/models/walls-v1.onnx';
+const ML_SIZE = 512; // must match the wall model's training input size (v1 trained at 512).
+                     // Reverted v2 (640): higher recall but lower precision → phantom walls.
+const ML_MEAN = [0.485, 0.456, 0.406], ML_STD = [0.229, 0.224, 0.225];
+let _ort = null, _wallSession = null;
+
+async function getOrt() {
+  if (_ort) return _ort;
+  _ort = await import('./vendor/ort/ort.wasm.min.mjs');
+  _ort.env.wasm.wasmPaths = '/vendor/ort/';
+  _ort.env.wasm.numThreads = 1;        // single-thread: no SharedArrayBuffer/COOP-COEP
+  return _ort;
+}
+async function getWallSession() {
+  if (_wallSession) return _wallSession;
+  const ort = await getOrt();
+  _wallSession = await ort.InferenceSession.create(ML_MODEL_URL, { executionProviders: ['wasm'] });
+  return _wallSession;
+}
+
+// Door/window detector (YOLOv8n, 2-class). Lazy-loaded like the wall model.
+const DW_MODEL_URL = '/models/doors-v2.onnx';
+const DW_SIZE = 640; // YOLOv8n @ 640. (doors-v3 = YOLOv8s@800 scored higher on val but
+                     // generalized WORSE to real plans — missed closet doors — so reverted.)
+const DW_CONF_DOOR = 0.25;            // door confidence floor (low — catch faint interior doors)
+const DW_CONF_WINDOW = 0.40;          // windows over-fire on wall/dimension lines → demand more confidence
+const DW_CLASSES = ['door', 'window'];
+// Reject impossibly-large detections (the main clutter source — long wall double-
+// lines / dimension lines misread as windows). Absolute (ft) AND scale-free
+// (fraction of the plan) caps, so it holds regardless of calibration.
+const DW_MAX_FT = { door: 8, window: 9 };
+const DW_MAX_SPAN_FRAC = 0.35;
+const DW_DEBUG = false;               // flip to true to log each detection's placement decision to the console
+let _dwSession = null;
+
+async function getDwSession() {
+  if (_dwSession) return _dwSession;
+  const ort = await getOrt();
+  _dwSession = await ort.InferenceSession.create(DW_MODEL_URL, { executionProviders: ['wasm'] });
+  return _dwSession;
+}
+
+export async function detectWallsML(img) {
+  const natW = img.naturalWidth, natH = img.naturalHeight;
+  if (!natW || !natH) return [];
+  const ort = await getOrt();
+  const sess = await getWallSession();
+
+  // Preprocess exactly like training: stretch to 512×512, ImageNet-normalize, CHW.
+  const S = ML_SIZE;
+  const c = document.createElement('canvas'); c.width = S; c.height = S;
+  const cx = c.getContext('2d', { willReadFrequently: true });
+  cx.drawImage(img, 0, 0, S, S);
+  let px;
+  try { px = cx.getImageData(0, 0, S, S).data; } catch { return []; } // tainted canvas
+  const t = new Float32Array(3 * S * S);
+  for (let i = 0; i < S * S; i++) {
+    t[i]            = (px[i * 4]     / 255 - ML_MEAN[0]) / ML_STD[0];
+    t[S * S + i]    = (px[i * 4 + 1] / 255 - ML_MEAN[1]) / ML_STD[1];
+    t[2 * S * S + i] = (px[i * 4 + 2] / 255 - ML_MEAN[2]) / ML_STD[2];
+  }
+  const out = await sess.run({ input: new ort.Tensor('float32', t, [1, 3, S, S]) });
+  const lg = out.logits.data;  // [1,2,S,S]: bg = [0 .. S*S), wall = [S*S .. 2*S*S)
+
+  // argmax per pixel → 512² wall mask.
+  const m = new Uint8Array(S * S);
+  for (let i = 0; i < S * S; i++) m[i] = lg[S * S + i] > lg[i] ? 1 : 0;
+
+  // Resample the (stretched) 512² mask onto the aspect-correct working grid W×H,
+  // matching prepare()'s convention so wallsFromMask scales back to native px right.
+  const scale = Math.min(1, MAX_DIM / Math.max(natW, natH));
+  const W = Math.max(1, Math.round(natW * scale)), H = Math.max(1, Math.round(natH * scale));
+  const ink = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) {
+    const sy = Math.min(S - 1, (y * S / H) | 0);
+    for (let x = 0; x < W; x++) {
+      const sx = Math.min(S - 1, (x * S / W) | 0);
+      ink[y * W + x] = m[sy * S + sx];
+    }
+  }
+  return wallsFromMask(ink, W, H, scale, halfThickOf(ink, W, H));
+}
+
+// --- ML door/window detection (on-device). Runs the YOLO detector, then SNAPS
+// each box at the location the MODEL found it. If a same-orientation wall is
+// right there, the opening attaches to it (wallId + t + width) so 3D segments a
+// real hole; otherwise it's placed as a short bridge at the box (matching the
+// spike — the model's position is trusted). `walls` is OPTIONAL: with none, every
+// detection is placed as a bridge, so this works standalone.
+// Returns items: { type, wallId, t, widthFt } (attached) or { type, bridge, x1,y1,x2,y2, widthFt }.
+export async function detectDoorsWindowsML(img, walls = [], opts = {}) {
+  detectDebug.dw = null; // clear last run's overlay data up front
+  const natW = img.naturalWidth, natH = img.naturalHeight;
+  if (!natW || !natH) return [];
+  const pxPerFt = opts.pxPerFt || 12;
+  const ort = await getOrt();
+  const sess = await getDwSession();
+
+  // Letterbox to 640 (preserve aspect, gray pad) — matches YOLO training preprocessing.
+  const S = DW_SIZE;
+  const sc = S / Math.max(natW, natH);
+  const nw = Math.round(natW * sc), nh = Math.round(natH * sc);
+  const padX = Math.floor((S - nw) / 2), padY = Math.floor((S - nh) / 2);
+  const c = document.createElement('canvas'); c.width = S; c.height = S;
+  const cx = c.getContext('2d', { willReadFrequently: true });
+  cx.fillStyle = 'rgb(114,114,114)'; cx.fillRect(0, 0, S, S);
+  cx.drawImage(img, padX, padY, nw, nh);
+  let px;
+  try { px = cx.getImageData(0, 0, S, S).data; } catch { return []; } // tainted canvas
+  const t = new Float32Array(3 * S * S);
+  for (let i = 0; i < S * S; i++) {
+    t[i] = px[i * 4] / 255; t[S * S + i] = px[i * 4 + 1] / 255; t[2 * S * S + i] = px[i * 4 + 2] / 255;
+  }
+  const out = await sess.run({ images: new ort.Tensor('float32', t, [1, 3, S, S]) });
+  const d = out.output0.data; // [1,300,6] = x1,y1,x2,y2,conf,cls in letterboxed 640 space
+
+  // Parse boxes above a PER-CLASS threshold → native px (undo the letterbox).
+  const boxes = [];
+  for (let i = 0; i < 300; i++) {
+    const conf = d[i * 6 + 4];
+    const type = DW_CLASSES[d[i * 6 + 5] | 0] || 'door';
+    if (conf < (type === 'window' ? DW_CONF_WINDOW : DW_CONF_DOOR)) continue;
+    boxes.push({
+      x1: (d[i * 6]     - padX) / sc, y1: (d[i * 6 + 1] - padY) / sc,
+      x2: (d[i * 6 + 2] - padX) / sc, y2: (d[i * 6 + 3] - padY) / sc,
+      conf, type,
+    });
+  }
+  if (!boxes.length) return [];
+
+  // Place each detected box. If it sits on a detected wall, attach the opening to
+  // that wall AT ITS TRUE PROJECTED POSITION (no inward shove — that was pushing
+  // doors sideways on short interior walls). If no wall is close enough but one is
+  // nearby, drop a short "bridge" at the box's own location so the opening still
+  // lands where the model found it (interior doors whose host wall wasn't detected).
+  // Boxes far from every wall are treated as false positives and dropped.
+  const minDim = Math.min(natW, natH);
+  const cand = [];
+  const dbg = [];
+  for (const b of boxes) {
+    const bw = b.x2 - b.x1, bh = b.y2 - b.y1;
+    const bcx = (b.x1 + b.x2) / 2, bcy = (b.y1 + b.y2) / 2;
+    const boxHoriz = bw >= bh; // wide box ⇒ opening runs horizontally ⇒ horizontal wall
+    // Nearest wall OF MATCHING ORIENTATION (a vertical door belongs on a vertical
+    // wall, not whatever edge is merely closest) plus nearest wall of any
+    // orientation (used only to gate bridging so we don't strand doors in open space).
+    let best = null, bestD = Infinity, anyD = Infinity;
+    for (const w of walls) {
+      const p = projectToSeg(bcx, bcy, w);
+      if (p.dist < anyD) anyD = p.dist;
+      const wallHoriz = Math.abs(w.x2 - w.x1) >= Math.abs(w.y2 - w.y1);
+      if (wallHoriz !== boxHoriz) continue; // orientation mismatch — skip
+      if (p.dist < bestD) { bestD = p.dist; best = { w, u: p.u }; }
+    }
+    const tol = Math.max(0.5 * Math.min(bw, bh) + 8, 0.03 * minDim);
+    const rec = { type: b.type, conf: +b.conf.toFixed(2), cx: Math.round(bcx), cy: Math.round(bcy),
+                  box: `${bw | 0}x${bh | 0}`, wallDist: Math.round(bestD), anyDist: Math.round(anyD),
+                  tol: Math.round(tol), decision: '',
+                  // raw model box (native px) for the debug overlay
+                  bx1: b.x1, by1: b.y1, bx2: b.x2, by2: b.y2 };
+    if (best && bestD <= tol) {
+      const w = best.w;
+      const L = Math.hypot(w.x2 - w.x1, w.y2 - w.y1) || 1;
+      const ux = (w.x2 - w.x1) / L, uy = (w.y2 - w.y1) / L;
+      // Opening width = the box's extent ALONG the wall direction.
+      let lo = Infinity, hi = -Infinity;
+      for (const [cxp, cyp] of [[b.x1, b.y1], [b.x2, b.y1], [b.x2, b.y2], [b.x1, b.y2]]) {
+        const proj = (cxp - w.x1) * ux + (cyp - w.y1) * uy;
+        lo = Math.min(lo, proj); hi = Math.max(hi, proj);
+      }
+      const spanPx = Math.min(Math.max(6, hi - lo), L);
+      const ft = cleanWidthFt(b.type, spanPx, minDim, pxPerFt);
+      if (ft == null) { rec.decision = 'DROP (oversized)'; dbg.push(rec); continue; }
+      const px = w.x1 + best.u * (w.x2 - w.x1), py = w.y1 + best.u * (w.y2 - w.y1);
+      cand.push({ type: b.type, conf: b.conf, wallId: w.id, t: best.u, widthFt: ft, cx: px, cy: py });
+      rec.decision = 'attach'; rec.placeX = px; rec.placeY = py; // box → this point on the wall
+    } else {
+      // No matching wall to sit on → place at the detected location (like the
+      // spike), oriented by box shape (wide ⇒ horizontal opening, tall ⇒ vertical).
+      const ft = cleanWidthFt(b.type, boxHoriz ? bw : bh, minDim, pxPerFt);
+      if (ft == null) { rec.decision = 'DROP (oversized)'; dbg.push(rec); continue; }
+      const half = (ft * pxPerFt) / 2; // bridge length matches the cleaned width
+      const seg = boxHoriz ? { x1: bcx - half, y1: bcy, x2: bcx + half, y2: bcy }
+                           : { x1: bcx, y1: bcy - half, x2: bcx, y2: bcy + half };
+      cand.push({ type: b.type, conf: b.conf, bridge: true, ...seg, widthFt: ft, cx: bcx, cy: bcy });
+      rec.decision = 'bridge'; rec.seg = seg; // floating opening dropped at this span
+    }
+    dbg.push(rec);
+  }
+  detectDebug.dw = { records: dbg, natW, natH }; // for the in-app debug overlay
+  if (DW_DEBUG && typeof console !== 'undefined') {
+    const lines = dbg.map(r =>
+      `${r.type}\tconf=${r.conf}\t(${r.cx},${r.cy})\tbox=${r.box}\twallDist=${r.wallDist}\tanyDist=${r.anyDist}\ttol=${r.tol}\t→ ${r.decision}`);
+    console.log(`[DW] ${boxes.length} detections (door≥${DW_CONF_DOOR}, window≥${DW_CONF_WINDOW}), ${walls.length} walls, img ${natW}x${natH}\n` + lines.join('\n'));
+  }
+
+  // De-dup only NEAR-COINCIDENT detections (higher confidence wins) — collapses
+  // cross-class/stacked boxes on the SAME opening (e.g. the top-wall door+window
+  // stack) without swallowing two genuinely separate doorways that sit close by.
+  cand.sort((a, b) => b.conf - a.conf);
+  const kept = [];
+  for (const it of cand) {
+    const r = Math.max(6, it.widthFt * pxPerFt * 0.3);
+    if (kept.some(k => Math.hypot(k.cx - it.cx, k.cy - it.cy) < r)) continue;
+    kept.push(it);
+  }
+  if (DW_DEBUG && typeof console !== 'undefined') {
+    const dN = kept.filter(k => k.type === 'door').length;
+    console.log(`[DW] placed ${kept.length} after de-dup (${dN} door, ${kept.length - dN} window)`);
+  }
+  return kept.map(({ cx, cy, conf, ...rest }) => rest);
+}
+
+// Clean an opening's width: reject impossibly-large detections (false windows on
+// wall/dimension lines) via an absolute ft cap AND a scale-free fraction-of-plan
+// cap, and standardize typical single doors to ~3 ft. Returns width in ft, or null
+// to drop the detection.
+function cleanWidthFt(type, spanPx, minDim, pxPerFt) {
+  if (spanPx > DW_MAX_SPAN_FRAC * minDim) return null;      // too big for any real opening (scale-free)
+  let ft = spanPx / pxPerFt;
+  if (ft > (DW_MAX_FT[type] || 8)) return null;             // absolute cap
+  if (type === 'door' && ft < 4) ft = 3;                    // single doors are ~3 ft (drops swing-arc inflation)
+  return ft;
+}
+
+// Closest point on segment w to (px,py): returns param u∈[0,1] along the segment
+// and the perpendicular distance to it.
+function projectToSeg(px, py, w) {
+  const dx = w.x2 - w.x1, dy = w.y2 - w.y1;
+  const L2 = dx * dx + dy * dy || 1;
+  const u = Math.max(0, Math.min(1, ((px - w.x1) * dx + (py - w.y1) * dy) / L2));
+  const qx = w.x1 + u * dx, qy = w.y1 + u * dy;
+  return { u, dist: Math.hypot(px - qx, py - qy) };
 }
 
 // Detect doors & windows from the GAPS between detected/traced walls. The gaps
