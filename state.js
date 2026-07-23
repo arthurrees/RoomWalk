@@ -351,6 +351,22 @@ export function clearOpenings() {
   emit();
 }
 
+// Remove doors only while preserving windows and their host walls. ML detections
+// that needed a short bridge wall get that bridge cleaned up when its door is the
+// last opening using it.
+export function clearDoors() {
+  const removedHosts = new Set(
+    state.openings.filter(o => o.type === 'door').map(o => o.wallId)
+  );
+  state.openings = state.openings.filter(o => o.type !== 'door');
+  const remainingHosts = new Set(state.openings.map(o => o.wallId));
+  state.walls = state.walls.filter(w =>
+    !(w.auto && w.bridge && removedHosts.has(w.id) && !remainingHosts.has(w.id))
+  );
+  state.selection = null;
+  emit();
+}
+
 export function resetAll() {
   state.image = null;
   state.scale = null;

@@ -35,7 +35,7 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
 | File | Responsibility |
 |------|----------------|
 | `index.html` | Layout: top bar, toolbar, sectioned Advanced dropdown, How-to guide, palette, readout/selection panels, three.js import map |
-| `styles.css` | ThinkPad-inspired theme (see Theme below) |
+| `styles.css` | Warm architectural-workspace UI theme and responsive shell (see Theme below) |
 | `state.js` | Central `state` object + `subscribe`/`emit`; mutators (addWall, addOpening, addFurniture, setScale, replaceWalls, **setDetectedWalls** (preserves+re-homes openings onto new walls, then `healBridges` connects nearby wall ends to floating opening bridges), setDetectedOpenings, **setMLOpenings** (attach-or-bridge), `closePalette`, etc.); `state.paletteOpen` is independent of `state.tool`; `reseedIds()` after load |
 | `geom.js` | Pure geometry helpers; unit format/parse; SAT OBB overlap (`obbOverlapMTV`); gap detection (`findGap`); shared constants |
 | `furniture.js` | Dependency-free catalog (real dims in feet) incl. wall-mounted items (`mount:'wall'`, `mountH`) + resize metadata + `unitCount`/`applyResize`/`sizeNote` |
@@ -62,8 +62,11 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
 - **Upload + blueprint outline.** Accepts images (PNG/JPG/etc.) **and PDFs**. PDFs
   are rendered to PNG by the vendored PDF.js (`vendor/pdfjs/`, lazy-loaded on
   first PDF upload) and then go through the same image pipeline; multi-page PDFs
-  prompt for the page. The plan is processed so dark lines → light graphite, white
-  bg → transparent. Toggle + detail (threshold) + opacity in Advanced.
+  prompt for the page. The plan is processed so dark lines → green graphite, white
+  bg → transparent. **Every new import automatically runs the existing on-device
+  ML wall model first, then the existing door/window model against those walls.**
+  The heuristic wall detector remains the automatic fallback when ML returns no
+  walls. Detection status and manual retry controls live in the right plan panel.
 - **Wall tracing.** Click two points. The draft **straightens to H/V first**
   (within ~10°, `AXIS_SNAP_DEG`) and snaps to an existing corner only if that corner
   lies on the straightened line — so nearby wall endpoints (esp. after ML detection)
@@ -75,7 +78,7 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
   Tuned for solid-wall plans; thin double-line plans degrade to manual tracing. This is
   the **primary** wall detector — on clean blueprints it often beats the ML model, so it's
   the un-tagged "Detect walls" button; the ML one below is labelled "(ML, beta)".
-- **Build from scratch.** `Start from scratch` (top bar) → a blank 1-ft world
+- **Build from scratch.** `Blank plan` (top bar) → a blank 1-ft world
   grid (`state.grid`); walls snap to it and scale is pre-set so dimensions are
   real-by-construction. Lets students with only a 3D/listing render rebuild a
   clean plan. Toggle via `Advanced → Canvas → Snap to grid`. The grid + its snap
@@ -127,8 +130,9 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
   3. **Calibrate by area** (sq ft / m²) from the traced wall polygon.
 - **Units.** Imperial (ft/in, default) or Metric (m) — Advanced dropdown.
   Internal canonical stays feet; only display/parse change.
-- **Readout panel** (top-right): px/ft, footprint W×H, floor area — cross-check
-  against the listing's stated sq ft.
+- **Plan panel** (right): px/ft, footprint W×H, floor area, both scale-calibration
+  methods (known total area or known wall length), automatic-detection status,
+  canvas appearance, and targeted removal actions.
 - **2D / 3D / Walk** views. Walk = click-drag look (NOT pointer lock — that was
   unreliable on Windows/Chromium), WASD/arrows move, Q/E turn, eye height 5'9",
   collision against walls (doors walkable, windows block) and furniture. On enter,
@@ -231,14 +235,14 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
 
 ## Theme
 
-"Foundry workspace" — matched to the FORWARD ops console. Cool navy-charcoal
-chassis (`--bg` `#181B22`, `--panel` `#1F232C`, `--panel-2` `#272C37`, border
-`#2A2F3A`), single **Foundry blue** accent **`#2F5FE0`** (walls + chrome all use it;
-selection / grips use the brighter `#5B8DEF`). Danger is rose `#F0617F`
-(kept distinct from the blue accent). Doors brown, windows blue, furniture
-neutral slate, clip warnings red, scale-pick guide amber. 2D colors live in the
-`PAL` object at the top of `view2d.js`; UI colors in CSS `:root`; the 3D scene
-background/fog + selection handles live in `view3d.js`.
+"Architectural desk" — a warm, light workspace built around paper `#F7F5EF`,
+deep ink `#24342F`, and sage `#287F6A`, with coral `#DF725B` reserved for
+selection and destructive emphasis. The left tool rail stays deep ink so creation
+tools remain visually anchored; the plan canvas and right inspector use quiet
+paper/panel surfaces. Doors remain warm brown, windows muted blue, and measurement
+guides amber. 2D colors live in the `PAL` object at the top of `view2d.js`; UI
+colors in CSS `:root`; the 3D scene background/fog and selection handles live in
+`view3d.js`.
 
 ## Conventions / gotchas
 

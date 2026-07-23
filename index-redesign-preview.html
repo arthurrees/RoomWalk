@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RoomWalk — UI redesign preview</title>
+  <style>
+    :root {
+      --ink: #24342f;
+      --ink-2: #344942;
+      --ink-soft: #667972;
+      --paper: #f7f5ef;
+      --paper-2: #eeece5;
+      --panel: #fffefa;
+      --line: #dcded7;
+      --line-strong: #c5cbc2;
+      --sage: #287f6a;
+      --sage-dark: #1e6857;
+      --sage-soft: #e3f0eb;
+      --coral: #df725b;
+      --coral-soft: #fae9e4;
+      --amber: #d9a33f;
+      --blue: #5b7da6;
+      --white: #ffffff;
+      --shadow-sm: 0 1px 2px rgba(34, 50, 45, .06), 0 3px 10px rgba(34, 50, 45, .04);
+      --shadow-md: 0 12px 32px rgba(34, 50, 45, .12);
+      --radius: 12px;
+      --topbar: 64px;
+      --rail: 76px;
+      --inspector: 292px;
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      color: var(--ink);
+      background: var(--paper-2);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input, select { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 3px solid rgba(40, 127, 106, .22);
+      outline-offset: 2px;
+    }
+
+    .app {
+      display: grid;
+      grid-template: var(--topbar) minmax(0, 1fr) / var(--rail) minmax(0, 1fr) var(--inspector);
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Top bar */
+    .topbar {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 20px;
+      padding: 0 18px;
+      background: rgba(255, 254, 250, .96);
+      border-bottom: 1px solid var(--line);
+      box-shadow: var(--shadow-sm);
+      z-index: 30;
+    }
+
+    .brand-group, .top-actions, .view-switcher, .row {
+      display: flex;
+      align-items: center;
+    }
+
+    .brand-group { gap: 13px; min-width: 0; }
+    .logo {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: var(--ink);
+      color: var(--white);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+      flex: none;
+    }
+    .logo svg { width: 22px; height: 22px; }
+    .brand-copy { min-width: 0; line-height: 1.1; }
+    .brand-name { font-size: 15px; font-weight: 760; letter-spacing: -.01em; }
+    .project-name {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 4px;
+      color: var(--ink-soft);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .save-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sage); }
+
+    .view-switcher {
+      gap: 3px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: var(--paper-2);
+    }
+    .view-btn {
+      min-width: 76px;
+      padding: 7px 13px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 650;
+      cursor: pointer;
+      transition: .16s ease;
+    }
+    .view-btn:hover { color: var(--ink); background: rgba(255,255,255,.55); }
+    .view-btn.active {
+      color: var(--white);
+      background: var(--ink);
+      box-shadow: 0 1px 3px rgba(34,50,45,.22);
+    }
+
+    .top-actions { justify-content: flex-end; gap: 8px; }
+    .icon-btn, .soft-btn, .primary-btn, .tiny-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: .15s ease;
+    }
+    .icon-btn {
+      width: 35px;
+      height: 35px;
+      padding: 0;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--ink-soft);
+    }
+    .icon-btn:hover { background: var(--paper-2); color: var(--ink); border-color: var(--line); }
+    .icon-btn svg, .soft-btn svg, .primary-btn svg, .tiny-btn svg { width: 17px; height: 17px; }
+    .top-divider { width: 1px; height: 24px; margin: 0 2px; background: var(--line); }
+    .soft-btn {
+      min-height: 36px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      font-size: 12px;
+      font-weight: 650;
+      box-shadow: var(--shadow-sm);
+    }
+    .soft-btn:hover { border-color: var(--line-strong); background: var(--white); }
+    .primary-btn {
+      min-height: 36px;
+      padding: 0 14px;
+      border: 1px solid var(--sage-dark);
+      background: var(--sage);
+      color: var(--white);
+      font-size: 12px;
+      font-weight: 700;
+      box-shadow: 0 3px 8px rgba(40,127,106,.18);
+    }
+    .primary-btn:hover { background: var(--sage-dark); transform: translateY(-1px); }
+
+    /* Left tool rail */
+    .tool-rail {
+      grid-row: 2;
+      padding: 12px 8px;
+      overflow: auto;
+      background: var(--ink);
+      border-right: 1px solid rgba(0,0,0,.08);
+      color: var(--white);
+      z-index: 12;
+    }
+    .rail-label {
+      margin: 5px 0 8px;
+      text-align: center;
+      color: rgba(255,255,255,.42);
+      font-size: 9px;
+      font-weight: 750;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .tool {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      width: 100%;
+      min-height: 58px;
+      margin: 2px 0;
+      padding: 8px 2px 7px;
+      border: 1px solid transparent;
+      border-radius: 11px;
+      background: transparent;
+      color: rgba(255,255,255,.67);
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 620;
+      transition: .15s ease;
+    }
+    .tool svg { width: 21px; height: 21px; }
+    .tool:hover { color: var(--white); background: rgba(255,255,255,.07); }
+    .tool.active {
+      color: var(--white);
+      background: var(--sage);
+      border-color: rgba(255,255,255,.12);
+      box-shadow: 0 5px 14px rgba(0,0,0,.15);
+    }
+    .tool .shortcut {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      color: rgba(255,255,255,.35);
+      font-size: 8px;
+      font-weight: 600;
+    }
+    .tool.active .shortcut { color: rgba(255,255,255,.65); }
+    .rail-rule { height: 1px; margin: 10px 8px; background: rgba(255,255,255,.1); }
+
+    /* Inspector */
+    .inspector {
+      grid-column: 3;
+      grid-row: 2;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--panel);
+      border-left: 1px solid var(--line);
+      z-index: 11;
+      overflow: hidden;
+    }
+    .inspector-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 57px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .eyebrow {
+      color: var(--ink-soft);
+      font-size: 9px;
+      font-weight: 760;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .inspector-title { margin-top: 3px; font-size: 14px; font-weight: 750; }
+    .inspector-scroll { flex: 1; overflow-y: auto; padding: 14px; }
+    .panel-section {
+      margin-bottom: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--white);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 13px 14px;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 720;
+    }
+    .section-head:hover { background: #fafaf7; }
+    .section-head svg { width: 15px; height: 15px; color: var(--ink-soft); transition: transform .15s; }
+    .panel-section.collapsed .section-head svg { transform: rotate(-90deg); }
+    .panel-section.collapsed .section-body { display: none; }
+    .section-body { padding: 0 14px 14px; }
+    .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .summary-card { padding: 10px; border-radius: 9px; background: var(--paper); }
+    .summary-card .k { color: var(--ink-soft); font-size: 10px; }
+    .summary-card .v { margin-top: 4px; font-size: 13px; font-weight: 740; }
+    .summary-card.wide { grid-column: 1 / -1; }
+    .summary-card.wide .v { color: var(--sage-dark); font-size: 16px; }
+
+    .field { margin-top: 12px; }
+    .field:first-child { margin-top: 0; }
+    .field-label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 7px;
+      color: var(--ink-soft);
+      font-size: 10px;
+      font-weight: 650;
+    }
+    .field select, .field input[type="number"] {
+      width: 100%;
+      height: 34px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--ink);
+      font-size: 12px;
+    }
+    .field input[type="range"] { width: 100%; accent-color: var(--sage); }
+    .segmented { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
+    .segmented button {
+      height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--ink-soft);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 650;
+    }
+    .segmented button.active { border-color: var(--sage); background: var(--sage-soft); color: var(--sage-dark); }
+    .switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 34px;
+      color: var(--ink-soft);
+      font-size: 11px;
+    }
+    .switch {
+      position: relative;
+      width: 35px;
+      height: 20px;
+      padding: 0;
+      border: 0;
+      border-radius: 99px;
+      background: #cdd2cd;
+      cursor: pointer;
+      transition: .16s;
+    }
+    .switch::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,.15);
+      transition: .16s;
+    }
+    .switch.on { background: var(--sage); }
+    .switch.on::after { transform: translateX(15px); }
+    .action-stack { display: grid; gap: 7px; }
+    .action-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 38px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--panel);
+      cursor: pointer;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 660;
+    }
+    .action-row:hover { border-color: var(--sage); background: var(--sage-soft); }
+    .action-row svg { width: 16px; height: 16px; color: var(--sage); }
+    .beta { margin-left: auto; padding: 2px 5px; border-radius: 5px; background: var(--coral-soft); color: var(--coral); font-size: 8px; font-weight: 760; letter-spacing: .05em; }
+
+    /* Workspace */
+    .workspace {
+      position: relative;
+      grid-column: 2;
+      grid-row: 2;
+      min-width: 0;
+      overflow: hidden;
+      background-color: var(--paper);
+      background-image:
+        linear-gradient(rgba(42,70,61,.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(42,70,61,.045) 1px, transparent 1px),
+        linear-gradient(rgba(42,70,61,.022) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(42,70,61,.022) 1px, transparent 1px);
+      background-size: 40px 40px, 40px 40px, 10px 10px, 10px 10px;
+    }
+    .workspace::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      box-shadow: inset 0 0 70px rgba(45,66,57,.035);
+    }
+    .context-bar {
+      position: absolute;
+      top: 15px;
+      left: 50%;
+      z-index: 8;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 42px;
+      max-width: calc(100% - 38px);
+      padding: 5px 6px 5px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255,254,250,.95);
+      box-shadow: var(--shadow-md);
+      transform: translateX(-50%);
+      backdrop-filter: blur(10px);
+    }
+    .context-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sage); }
+    .context-copy { white-space: nowrap; font-size: 11px; color: var(--ink-soft); }
+    .context-copy b { color: var(--ink); }
+    .context-sep { width: 1px; height: 20px; margin: 0 2px; background: var(--line); }
+    .tiny-btn {
+      min-height: 30px;
+      padding: 0 9px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--ink-soft);
+      font-size: 10px;
+      font-weight: 650;
+    }
+    .tiny-btn:hover { border-color: var(--line); background: var(--paper); color: var(--ink); }
+
+    .plan-wrap {
+      position: absolute;
+      inset: 76px 42px 56px;
+      display: grid;
+      place-items: center;
+      transition: .25s ease;
+    }
+    .floorplan {
+      width: min(760px, 92%);
+      max-height: 100%;
+      filter: drop-shadow(0 14px 20px rgba(44,65,57,.08));
+      transition: transform .3s ease, filter .3s ease, opacity .2s;
+      overflow: visible;
+    }
+    .room-fill { fill: rgba(255,255,255,.84); }
+    .room-fill.alt { fill: rgba(227,240,235,.42); }
+    .wall {
+      stroke: #40564e;
+      stroke-width: 12;
+      stroke-linecap: square;
+      fill: none;
+      cursor: pointer;
+      transition: stroke .15s, stroke-width .15s;
+    }
+    .wall:hover { stroke: var(--sage); stroke-width: 14; }
+    .wall.selected { stroke: var(--coral); stroke-width: 14; }
+    .door { stroke: #b47a52; stroke-width: 4; fill: none; }
+    .window { stroke: var(--blue); stroke-width: 6; }
+    .furniture { fill: #d7ddd7; stroke: #71867d; stroke-width: 2; cursor: pointer; transition: .15s; }
+    .furniture:hover { fill: var(--sage-soft); stroke: var(--sage); }
+    .furniture-detail { stroke: #87998f; stroke-width: 1.5; fill: none; pointer-events: none; }
+    .fixture { fill: #e8ebe6; stroke: #71867d; stroke-width: 2; }
+    .room-label { fill: #88968f; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; pointer-events: none; }
+    .dimension { fill: #778a82; font-size: 10px; font-weight: 650; pointer-events: none; }
+    .measure { stroke: #9aaaa3; stroke-width: 1.2; stroke-dasharray: 3 3; }
+
+    .view-3d .floorplan {
+      transform: perspective(1000px) rotateX(54deg) rotateZ(-22deg) scale(.86);
+      filter: drop-shadow(24px 32px 24px rgba(44,65,57,.22));
+    }
+    .view-3d .plan-wrap { inset: 64px 10px 18px; }
+    .view-3d .wall { stroke-width: 18; }
+    .view-3d .room-label, .view-3d .measure, .view-3d .dimension { opacity: 0; }
+    .view-walk .plan-wrap, .view-walk .context-bar { display: none; }
+
+    .walk-scene {
+      display: none;
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      background: linear-gradient(#d7e3df 0 52%, #b7a58f 52% 100%);
+      perspective: 800px;
+    }
+    .view-walk .walk-scene { display: block; }
+    .walk-wall {
+      position: absolute;
+      top: 10%;
+      bottom: 13%;
+      background: #edf0e9;
+      border: 1px solid #cfd5cc;
+      box-shadow: inset 0 -18px 30px rgba(67,76,69,.08);
+    }
+    .walk-wall.back { left: 18%; right: 16%; transform: translateZ(-100px); }
+    .walk-wall.left { left: -12%; width: 32%; transform: rotateY(64deg); transform-origin: right; }
+    .walk-wall.right { right: -12%; width: 30%; transform: rotateY(-64deg); transform-origin: left; }
+    .walk-window {
+      position: absolute;
+      top: 22%;
+      left: 39%;
+      width: 27%;
+      height: 25%;
+      border: 10px solid #70837b;
+      background: linear-gradient(155deg, #a9c8d3, #e4ecea 54%, #87acb9);
+      box-shadow: 0 8px 16px rgba(48,71,66,.13);
+    }
+    .walk-sofa {
+      position: absolute;
+      left: 36%;
+      bottom: 15%;
+      width: 31%;
+      height: 24%;
+      border: 7px solid #657d74;
+      border-radius: 12px 12px 5px 5px;
+      background: #a8bcb3;
+      box-shadow: 0 18px 24px rgba(33,48,43,.24);
+    }
+    .walk-sofa::before {
+      content: "";
+      position: absolute;
+      inset: 8% 5% 45%;
+      border-radius: 6px;
+      border-bottom: 5px solid #657d74;
+      background: rgba(255,255,255,.12);
+    }
+    .walk-rug {
+      position: absolute;
+      left: 25%;
+      right: 18%;
+      bottom: -3%;
+      height: 22%;
+      background: #d7cdbb;
+      border: 10px solid rgba(255,255,255,.35);
+      transform: rotateX(65deg);
+    }
+    .crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 14px;
+      height: 14px;
+      transform: translate(-50%, -50%);
+    }
+    .crosshair::before, .crosshair::after {
+      content: "";
+      position: absolute;
+      background: rgba(36,52,47,.7);
+    }
+    .crosshair::before { top: 6px; left: 0; width: 14px; height: 2px; }
+    .crosshair::after { top: 0; left: 6px; width: 2px; height: 14px; }
+    .walk-help {
+      position: absolute;
+      left: 50%;
+      bottom: 22px;
+      padding: 8px 12px;
+      border: 1px solid rgba(255,255,255,.5);
+      border-radius: 99px;
+      background: rgba(36,52,47,.82);
+      color: white;
+      transform: translateX(-50%);
+      font-size: 11px;
+      backdrop-filter: blur(8px);
+    }
+
+    .zoom-controls, .status-strip {
+      position: absolute;
+      bottom: 14px;
+      z-index: 8;
+      display: flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      background: rgba(255,254,250,.94);
+      box-shadow: var(--shadow-sm);
+      backdrop-filter: blur(8px);
+    }
+    .zoom-controls { left: 15px; padding: 3px; border-radius: 10px; }
+    .zoom-controls button {
+      width: 30px;
+      height: 28px;
+      padding: 0;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--ink-soft);
+      cursor: pointer;
+      font-size: 17px;
+    }
+    .zoom-controls button:hover { background: var(--paper-2); color: var(--ink); }
+    .zoom-value { min-width: 46px; text-align: center; color: var(--ink-soft); font-size: 10px; font-weight: 650; }
+    .status-strip { right: 15px; gap: 8px; padding: 7px 10px; border-radius: 9px; color: var(--ink-soft); font-size: 10px; }
+    .status-strip .save-dot { width: 7px; height: 7px; }
+
+    /* Floating menus, modal and toast */
+    .popover {
+      position: fixed;
+      top: 56px;
+      right: 18px;
+      z-index: 60;
+      width: 230px;
+      padding: 7px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel);
+      box-shadow: var(--shadow-md);
+    }
+    .popover button {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 37px;
+      padding: 0 10px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 620;
+    }
+    .popover button:hover { background: var(--paper); }
+    .popover button svg { width: 16px; height: 16px; color: var(--ink-soft); }
+    .popover-rule { height: 1px; margin: 5px 4px; background: var(--line); }
+    .preview-tag { padding: 9px 10px 6px; color: var(--ink-soft); font-size: 9px; line-height: 1.45; }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: rgba(28,42,37,.48);
+      backdrop-filter: blur(3px);
+    }
+    .modal {
+      position: relative;
+      width: min(480px, 100%);
+      padding: 24px;
+      border: 1px solid rgba(255,255,255,.3);
+      border-radius: 18px;
+      background: var(--panel);
+      box-shadow: 0 24px 80px rgba(26,42,36,.26);
+    }
+    .modal h2 { margin: 0 0 8px; font-size: 20px; letter-spacing: -.02em; }
+    .modal p { margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.55; }
+    .modal-steps { display: grid; gap: 9px; margin-top: 18px; }
+    .modal-step { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; }
+    .step-number { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--sage-soft); color: var(--sage-dark); font-size: 11px; font-weight: 780; }
+    .modal-step b { display: block; margin-bottom: 2px; font-size: 12px; }
+    .modal-step span { color: var(--ink-soft); font-size: 11px; line-height: 1.4; }
+    .modal-close { position: absolute; top: 14px; right: 14px; }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      max-width: calc(100% - 30px);
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: var(--ink);
+      color: var(--white);
+      box-shadow: var(--shadow-md);
+      transform: translate(-50%, 16px);
+      opacity: 0;
+      pointer-events: none;
+      transition: .2s ease;
+      font-size: 11px;
+    }
+    .toast.show { transform: translate(-50%, 0); opacity: 1; }
+    .toast svg { width: 16px; height: 16px; color: #80ceb8; }
+
+    .mobile-note { display: none; }
+
+    @media (max-width: 1040px) {
+      :root { --inspector: 260px; }
+      .soft-btn span, .primary-btn span { display: none; }
+      .soft-btn, .primary-btn { width: 36px; padding: 0; }
+      .top-actions { gap: 4px; }
+    }
+    @media (max-width: 780px) {
+      .app { grid-template-columns: var(--rail) 1fr; }
+      .inspector { display: none; }
+      .topbar { grid-template-columns: 1fr auto; }
+      .view-switcher { position: absolute; left: 50%; transform: translateX(-50%); }
+      .view-btn { min-width: 56px; padding-inline: 8px; }
+      .top-actions .icon-btn:nth-child(-n+3), .top-divider { display: none; }
+      .brand-copy { display: none; }
+    }
+    @media (max-width: 560px) {
+      .mobile-note {
+        position: fixed;
+        inset: 0;
+        z-index: 200;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: var(--paper);
+      }
+      .mobile-note > div { max-width: 320px; text-align: center; }
+      .mobile-note .logo { margin: 0 auto 14px; }
+      .mobile-note h2 { margin: 0 0 8px; font-size: 20px; }
+      .mobile-note p { margin: 0; color: var(--ink-soft); line-height: 1.55; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand-group">
+        <div class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M4 4v16h16V8h-8V4z"/><path d="M12 4v9h8M4 13h8M8 13v7"/>
+          </svg>
+        </div>
+        <div class="brand-copy">
+          <div class="brand-name">RoomWalk</div>
+          <div class="project-name"><span class="save-dot"></span> Apartment concept · Saved</div>
+        </div>
+      </div>
+
+      <nav class="view-switcher" aria-label="View mode">
+        <button class="view-btn active" data-view="2d">2D Plan</button>
+        <button class="view-btn" data-view="3d">3D</button>
+        <button class="view-btn" data-view="walk">Walk</button>
+      </nav>
+
+      <div class="top-actions">
+        <button class="icon-btn" data-action="undo" title="Undo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 7 4 12l5 5"/><path d="M5 12h8a6 6 0 0 1 6 6"/></svg>
+        </button>
+        <button class="icon-btn" data-action="redo" title="Redo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m15 7 5 5-5 5"/><path d="M19 12h-8a6 6 0 0 0-6 6"/></svg>
+        </button>
+        <button class="icon-btn" id="help-button" title="Quick guide">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9.8 9a2.4 2.4 0 1 1 3.2 2.25c-.7.3-1 .8-1 1.5v.25"/><path d="M12 17h.01"/></svg>
+        </button>
+        <span class="top-divider"></span>
+        <button class="soft-btn" data-preview-action="open">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5h6l2 3h8v11z"/></svg>
+          <span>Open</span>
+        </button>
+        <button class="primary-btn" data-preview-action="upload">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4m0 0L8 8m4-4 4 4"/><path d="M5 14v5h14v-5"/></svg>
+          <span>Import plan</span>
+        </button>
+        <button class="icon-btn" id="project-menu-button" title="Project menu" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <aside class="tool-rail" aria-label="Drawing tools">
+      <div class="rail-label">Create</div>
+      <button class="tool active" data-tool="Select">
+        <span class="shortcut">V</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m5 3 12 9-6 1.5L8.5 19z"/></svg>
+        Select
+      </button>
+      <button class="tool" data-tool="Wall">
+        <span class="shortcut">W</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5h16v14"/><path d="M4 10h16M9 5v5m6 0v9M4 15h11"/></svg>
+        Wall
+      </button>
+      <button class="tool" data-tool="Door">
+        <span class="shortcut">D</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 20V4h11v16"/><path d="M16 20a11 11 0 0 0-11-11"/><circle cx="13" cy="12" r=".8" fill="currentColor"/></svg>
+        Door
+      </button>
+      <button class="tool" data-tool="Window">
+        <span class="shortcut">R</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="14" rx="1"/><path d="M12 5v14M4 12h16"/></svg>
+        Window
+      </button>
+      <div class="rail-rule"></div>
+      <div class="rail-label">Design</div>
+      <button class="tool" data-tool="Items">
+        <span class="shortcut">I</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14v7H5z"/><path d="M7 12V8h4a2 2 0 0 1 2 2v2m0 0v-2a2 2 0 0 1 2-2h2v4M7 19v2m10-2v2"/></svg>
+        Items
+      </button>
+      <button class="tool" data-tool="Materials">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 3 8l9 5 9-5z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></svg>
+        Finish
+      </button>
+    </aside>
+
+    <main class="workspace view-2d" id="workspace">
+      <div class="context-bar" id="context-bar">
+        <span class="context-dot"></span>
+        <span class="context-copy"><b id="context-title">Select</b> · Click walls, openings, and items to edit</span>
+        <span class="context-sep"></span>
+        <button class="tiny-btn" data-action="fit">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3H3v5m13-5h5v5M8 21H3v-5m13 5h5v-5"/></svg>
+          Fit plan
+        </button>
+      </div>
+
+      <div class="plan-wrap">
+        <svg class="floorplan" id="floorplan" viewBox="0 0 780 520" role="img" aria-label="Sample apartment floor plan">
+          <rect class="room-fill" x="90" y="55" width="595" height="395" rx="2"/>
+          <rect class="room-fill alt" x="96" y="61" width="329" height="223"/>
+          <rect class="room-fill alt" x="431" y="290" width="248" height="154"/>
+
+          <g class="wall-group">
+            <path class="wall" data-wall="North exterior wall" d="M90 55H685"/>
+            <path class="wall" data-wall="East exterior wall" d="M685 55V450"/>
+            <path class="wall" data-wall="South exterior wall" d="M685 450H90"/>
+            <path class="wall" data-wall="West exterior wall" d="M90 450V55"/>
+            <path class="wall" data-wall="Living room partition" d="M425 55V285"/>
+            <path class="wall" data-wall="Hall partition" d="M425 285H685"/>
+            <path class="wall" data-wall="Bedroom partition" d="M425 285V450"/>
+            <path class="wall" data-wall="Bathroom wall" d="M545 285V375"/>
+            <path class="wall" data-wall="Bathroom wall" d="M545 375H685"/>
+            <path class="wall" data-wall="Entry wall" d="M210 285V450"/>
+            <path class="wall" data-wall="Kitchen wall" d="M90 285H330"/>
+          </g>
+
+          <g>
+            <line class="window" x1="190" y1="55" x2="275" y2="55"/>
+            <line class="window" x1="500" y1="55" x2="575" y2="55"/>
+            <line class="window" x1="685" y1="150" x2="685" y2="220"/>
+            <line class="window" x1="485" y1="450" x2="560" y2="450"/>
+
+            <path class="door" d="M425 232V285M425 232a53 53 0 0 0-53 53"/>
+            <path class="door" d="M330 285h53m-53 0a53 53 0 0 1 53 53"/>
+            <path class="door" d="M545 332v43m0-43a43 43 0 0 1 43 43"/>
+            <path class="door" d="M210 352v48m0-48a48 48 0 0 0-48 48"/>
+          </g>
+
+          <g>
+            <rect class="furniture" x="145" y="115" width="175" height="70" rx="9"/>
+            <path class="furniture-detail" d="M155 125h155v32H155zm46 0v32m56-32v32M145 165h175"/>
+            <rect class="furniture" x="185" y="214" width="95" height="42" rx="20"/>
+            <ellipse class="furniture-detail" cx="232" cy="235" rx="32" ry="12"/>
+
+            <rect class="furniture" x="485" y="100" width="130" height="95" rx="5"/>
+            <rect class="furniture-detail" x="498" y="112" width="104" height="54" rx="4"/>
+            <path class="furniture-detail" d="M550 112v54M485 176h130"/>
+
+            <rect class="furniture" x="455" y="320" width="62" height="102" rx="4"/>
+            <path class="furniture-detail" d="M462 327h48v39h-48m24-39v39"/>
+
+            <rect class="fixture" x="110" y="310" width="77" height="30" rx="3"/>
+            <circle class="furniture-detail" cx="132" cy="325" r="9"/>
+            <rect class="fixture" x="110" y="345" width="77" height="48" rx="3"/>
+            <path class="furniture-detail" d="M110 369h77"/>
+
+            <rect class="fixture" x="575" y="305" width="80" height="28" rx="3"/>
+            <ellipse class="furniture-detail" cx="615" cy="319" rx="19" ry="7"/>
+            <rect class="fixture" x="595" y="342" width="38" height="25" rx="10"/>
+          </g>
+
+          <g>
+            <text class="room-label" x="230" y="92" text-anchor="middle">Living</text>
+            <text class="room-label" x="555" y="88" text-anchor="middle">Bedroom</text>
+            <text class="room-label" x="150" y="430" text-anchor="middle">Kitchen</text>
+            <text class="room-label" x="485" y="430" text-anchor="middle">Office</text>
+            <text class="room-label" x="615" y="400" text-anchor="middle">Bath</text>
+
+            <path class="measure" d="M90 485H685M90 477v16m595-16v16"/>
+            <text class="dimension" x="388" y="503" text-anchor="middle">38′ 6″</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="walk-scene">
+        <div class="walk-wall back"></div>
+        <div class="walk-wall left"></div>
+        <div class="walk-wall right"></div>
+        <div class="walk-window"></div>
+        <div class="walk-sofa"></div>
+        <div class="walk-rug"></div>
+        <div class="crosshair"></div>
+        <div class="walk-help">Click + drag to look · WASD / arrows to move · Q / E to turn</div>
+      </div>
+
+      <div class="zoom-controls">
+        <button data-zoom="-10" aria-label="Zoom out">−</button>
+        <span class="zoom-value" id="zoom-value">100%</span>
+        <button data-zoom="10" aria-label="Zoom in">+</button>
+        <button data-action="fit" aria-label="Fit plan" title="Fit plan">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3H3v5m13-5h5v5M8 21H3v-5m13 5h5v-5"/></svg>
+        </button>
+      </div>
+      <div class="status-strip"><span class="save-dot"></span><span>Sample plan · scale 12 px / ft</span></div>
+    </main>
+
+    <aside class="inspector">
+      <div class="inspector-head">
+        <div>
+          <div class="eyebrow" id="inspector-eyebrow">Project</div>
+          <div class="inspector-title" id="inspector-title">Plan overview</div>
+        </div>
+        <button class="icon-btn" data-action="inspector" title="Inspector options">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+      <div class="inspector-scroll">
+        <section class="panel-section">
+          <button class="section-head">Plan summary
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 10 5 5 5-5"/></svg>
+          </button>
+          <div class="section-body">
+            <div class="summary-grid">
+              <div class="summary-card wide"><div class="k">Floor area</div><div class="v">724 sq ft</div></div>
+              <div class="summary-card"><div class="k">Footprint</div><div class="v">38′6″ × 26′</div></div>
+              <div class="summary-card"><div class="k">Scale</div><div class="v">12 px / ft</div></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel-section" id="selection-section">
+          <button class="section-head">Plan settings
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 10 5 5 5-5"/></svg>
+          </button>
+          <div class="section-body">
+            <div class="field">
+              <div class="field-label"><span>Units</span></div>
+              <div class="segmented">
+                <button class="active">Feet / inches</button>
+                <button>Metric</button>
+              </div>
+            </div>
+            <div class="field">
+              <div class="field-label"><span>Wall height</span><span>9 ft</span></div>
+              <input type="range" min="6" max="14" step=".5" value="9" />
+            </div>
+            <div class="switch-row"><span>Snap to 1 ft grid</span><button class="switch on" aria-label="Toggle grid snapping"></button></div>
+            <div class="switch-row"><span>Show dimensions</span><button class="switch on" aria-label="Toggle dimensions"></button></div>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <button class="section-head">Smart detection
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 10 5 5 5-5"/></svg>
+          </button>
+          <div class="section-body">
+            <div class="action-stack">
+              <button class="action-row" data-preview-action="detect">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 9V4h5m6 0h5v5M4 15v5h5m6 0h5v-5"/><path d="M8 12h8"/></svg>
+                Detect walls
+              </button>
+              <button class="action-row" data-preview-action="detect">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 1.5 4.2L18 9l-4.5 1.8L12 15l-1.5-4.2L6 9l4.5-1.8z"/><path d="m18 14 .8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8z"/></svg>
+                Doors &amp; windows
+                <span class="beta">BETA</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <button class="section-head">Canvas appearance
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 10 5 5 5-5"/></svg>
+          </button>
+          <div class="section-body">
+            <div class="field">
+              <div class="field-label"><span>Plan opacity</span><span>85%</span></div>
+              <input type="range" min="0" max="100" value="85" />
+            </div>
+            <div class="field">
+              <div class="field-label"><span>Floor finish</span></div>
+              <select><option>Light oak</option><option>Warm tile</option><option>Natural carpet</option><option>Concrete</option></select>
+            </div>
+          </div>
+        </section>
+      </div>
+    </aside>
+  </div>
+
+  <div class="popover" id="project-popover" hidden>
+    <button data-preview-action="save">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h12l2 2v14H5z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/></svg>
+      Save project
+    </button>
+    <button data-preview-action="scratch">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4zM4 10h16M10 4v16"/></svg>
+      Start from scratch
+    </button>
+    <div class="popover-rule"></div>
+    <button data-preview-action="settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a8 8 0 0 0-1.7-1L14.5 3h-5l-.4 3.1a8 8 0 0 0-1.7 1l-2.4-1-2 3.4L5.1 11a7 7 0 0 0 0 2L3 14.5l2 3.4 2.4-1a8 8 0 0 0 1.7 1l.4 3.1h5l.4-3.1a8 8 0 0 0 1.7-1l2.4 1 2-3.4-2.1-1.5a7 7 0 0 0 .1-1z"/></svg>
+      Project settings
+    </button>
+    <div class="preview-tag">Concept preview only. These controls do not read, upload, save, or change any files.</div>
+  </div>
+
+  <div class="modal-backdrop" id="help-modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="help-title">
+      <button class="icon-btn modal-close" id="help-close" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+      <div class="eyebrow">Quick start</div>
+      <h2 id="help-title">From floor plan to walkthrough</h2>
+      <p>The redesigned interface groups the workflow into three clear stages while keeping the existing RoomWalk engine and canvas model intact.</p>
+      <div class="modal-steps">
+        <div class="modal-step"><div class="step-number">1</div><div><b>Import or draw</b><span>Bring in a floor plan, or begin on the one-foot grid.</span></div></div>
+        <div class="modal-step"><div class="step-number">2</div><div><b>Build and furnish</b><span>Use the left rail for walls, openings, furniture, and finishes.</span></div></div>
+        <div class="modal-step"><div class="step-number">3</div><div><b>Review in 3D</b><span>Switch views from the center of the top bar whenever you like.</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></svg>
+    <span id="toast-copy">Preview interaction</span>
+  </div>
+
+  <div class="mobile-note">
+    <div>
+      <div class="logo">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4v16h16V8h-8V4z"/><path d="M12 4v9h8M4 13h8M8 13v7"/></svg>
+      </div>
+      <h2>RoomWalk works best with room to draw</h2>
+      <p>Open this UI preview on a tablet or desktop to explore the full workspace.</p>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const workspace = document.getElementById('workspace');
+      const floorplan = document.getElementById('floorplan');
+      const toast = document.getElementById('toast');
+      const toastCopy = document.getElementById('toast-copy');
+      const popover = document.getElementById('project-popover');
+      const menuButton = document.getElementById('project-menu-button');
+      const helpModal = document.getElementById('help-modal');
+      const inspectorEyebrow = document.getElementById('inspector-eyebrow');
+      const inspectorTitle = document.getElementById('inspector-title');
+      let zoom = 100;
+      let toastTimer;
+
+      function showToast(message) {
+        clearTimeout(toastTimer);
+        toastCopy.textContent = message;
+        toast.classList.add('show');
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 2400);
+      }
+
+      function applyZoom() {
+        floorplan.style.transform = workspace.classList.contains('view-3d')
+          ? 'perspective(1000px) rotateX(54deg) rotateZ(-22deg) scale(' + (.86 * zoom / 100) + ')'
+          : 'scale(' + zoom / 100 + ')';
+      }
+
+      document.querySelectorAll('.view-btn').forEach(button => {
+        button.addEventListener('click', () => {
+          document.querySelectorAll('.view-btn').forEach(item => item.classList.remove('active'));
+          button.classList.add('active');
+          workspace.className = 'workspace view-' + button.dataset.view;
+          applyZoom();
+          const labels = { '2d': '2D plan', '3d': '3D orbit', 'walk': 'Walkthrough' };
+          showToast(labels[button.dataset.view] + ' preview');
+        });
+      });
+
+      const toolMessages = {
+        Select: 'Click walls, openings, and items to edit',
+        Wall: 'Click two points to draw a wall · hold Shift to constrain',
+        Door: 'Click a wall to place a standard 3 ft door',
+        Window: 'Click a wall to place a window',
+        Items: 'Choose furniture, then click the plan to place it',
+        Materials: 'Select a room or wall to change its finish'
+      };
+
+      document.querySelectorAll('.tool').forEach(button => {
+        button.addEventListener('click', () => {
+          document.querySelectorAll('.tool').forEach(item => item.classList.remove('active'));
+          button.classList.add('active');
+          const name = button.dataset.tool;
+          document.querySelector('.context-copy').innerHTML = '<b id="context-title">' + name + '</b> · ' + toolMessages[name];
+          showToast(name + ' tool selected');
+        });
+      });
+
+      document.querySelectorAll('.section-head').forEach(button => {
+        button.addEventListener('click', () => button.closest('.panel-section').classList.toggle('collapsed'));
+      });
+
+      document.querySelectorAll('.switch').forEach(button => {
+        button.addEventListener('click', () => button.classList.toggle('on'));
+      });
+
+      document.querySelectorAll('.segmented button').forEach(button => {
+        button.addEventListener('click', () => {
+          button.parentElement.querySelectorAll('button').forEach(item => item.classList.remove('active'));
+          button.classList.add('active');
+          showToast(button.textContent.trim() + ' selected');
+        });
+      });
+
+      document.querySelectorAll('.wall').forEach(wall => {
+        wall.addEventListener('click', () => {
+          document.querySelectorAll('.wall').forEach(item => item.classList.remove('selected'));
+          wall.classList.add('selected');
+          inspectorEyebrow.textContent = 'Selected wall';
+          inspectorTitle.textContent = wall.dataset.wall;
+          showToast('Wall selected · properties appear at right');
+        });
+      });
+
+      document.querySelectorAll('.furniture').forEach(item => {
+        item.addEventListener('click', () => {
+          inspectorEyebrow.textContent = 'Selected item';
+          inspectorTitle.textContent = 'Furniture';
+          showToast('Furniture selected · resize, rotate, hide, or delete');
+        });
+      });
+
+      document.querySelectorAll('[data-zoom]').forEach(button => {
+        button.addEventListener('click', () => {
+          zoom = Math.max(60, Math.min(150, zoom + Number(button.dataset.zoom)));
+          applyZoom();
+          document.getElementById('zoom-value').textContent = zoom + '%';
+        });
+      });
+
+      document.querySelectorAll('[data-action="fit"]').forEach(button => {
+        button.addEventListener('click', () => {
+          zoom = 100;
+          floorplan.style.transform = '';
+          document.getElementById('zoom-value').textContent = '100%';
+          showToast('Plan fitted to workspace');
+        });
+      });
+
+      menuButton.addEventListener('click', event => {
+        event.stopPropagation();
+        popover.hidden = !popover.hidden;
+        menuButton.setAttribute('aria-expanded', String(!popover.hidden));
+      });
+      document.addEventListener('click', event => {
+        if (!popover.contains(event.target) && event.target !== menuButton) {
+          popover.hidden = true;
+          menuButton.setAttribute('aria-expanded', 'false');
+        }
+      });
+
+      document.getElementById('help-button').addEventListener('click', () => helpModal.hidden = false);
+      document.getElementById('help-close').addEventListener('click', () => helpModal.hidden = true);
+      helpModal.addEventListener('click', event => {
+        if (event.target === helpModal) helpModal.hidden = true;
+      });
+
+      document.querySelectorAll('[data-preview-action]').forEach(button => {
+        button.addEventListener('click', event => {
+          event.stopPropagation();
+          const labels = {
+            upload: 'Import is disabled in this visual preview',
+            open: 'Open is disabled in this visual preview',
+            save: 'Save is disabled in this visual preview',
+            scratch: 'Start-from-scratch would open a clean one-foot grid',
+            settings: 'Project settings would open here',
+            detect: 'Detection would run through the existing RoomWalk engine'
+          };
+          showToast(labels[button.dataset.previewAction] || 'Preview interaction');
+          popover.hidden = true;
+        });
+      });
+
+      document.querySelectorAll('[data-action="undo"], [data-action="redo"]').forEach(button => {
+        button.addEventListener('click', () => showToast(button.dataset.action === 'undo' ? 'Nothing to undo in preview' : 'Nothing to redo in preview'));
+      });
+
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+          popover.hidden = true;
+          helpModal.hidden = true;
+          document.querySelectorAll('.wall').forEach(item => item.classList.remove('selected'));
+          inspectorEyebrow.textContent = 'Project';
+          inspectorTitle.textContent = 'Plan overview';
+        }
+        const keyTools = { v: 'Select', w: 'Wall', d: 'Door', r: 'Window', i: 'Items' };
+        const toolName = keyTools[event.key.toLowerCase()];
+        if (toolName) document.querySelector('.tool[data-tool="' + toolName + '"]').click();
+      });
+    })();
+  </script>
+</body>
+</html>

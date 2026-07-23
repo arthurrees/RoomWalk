@@ -9,33 +9,31 @@ import { getItem, unitCount, applyResize, sizeNote } from './furniture.js';
 import { resolveAgainstWalls, fitBetweenWalls, recomputeClips, wallSnapPose } from './collision.js';
 import { detectDebug } from './detect.js';
 
-// ThinkPad-inspired palette: matte near-black, graphite reference lines,
-// ThinkPad red as the single accent for the user's own geometry.
+// Warm architectural-desk palette shared with the redesigned application shell.
 const PAL = {
-  canvasBg: '#181b22',
-  grid: 'rgba(255,255,255,0.035)',
-  wall: '#2f5fe0',          // traced walls / outline — Foundry blue
-  wallSel: '#5b8def',       // selected wall — brighter blue
-  node: '#2f5fe0',          // wall endpoint dots
-  draft: '#2f5fe0',
-  draftEnd: '#5b8def',
-  // Openings keep their own identity so they never blend into the blue wall:
-  door: '#a8723f',          // generic wood brown
-  doorSel: '#d49356',       // brighter brown when selected
-  window: '#6fb7dd',        // generic light blue
-  windowSel: '#9ad4f0',     // brighter blue when selected
-  handle: '#5b8def',        // blue grips mark the active opening
-  accentFill: 'rgba(47,95,224,0.95)',
-  accentStroke: 'rgba(47,95,224,0.7)',
-  scalePick: '#f0a500',     // amber — a distinct, temporary measurement guide
-  furnFill: 'rgba(125,134,144,0.32)',
-  furnStroke: '#aab2bd',
-  wallMountStroke: '#7fb7c8',   // teal dashed outline = wall-mounted item
-  furnLabel: '#dfe4ea',
-  furnSel: '#5b8def',
-  furnGhost: 'rgba(170,178,189,0.45)',
-  warn: '#ff4d4d',
-  glow: 'rgba(47,95,224,0.45)',
+  canvasBg: '#f7f5ef',
+  grid: 'rgba(42,70,61,0.08)',
+  wall: '#40564e',
+  wallSel: '#df725b',
+  node: '#287f6a',
+  draft: '#287f6a',
+  draftEnd: '#df725b',
+  door: '#b47a52',
+  doorSel: '#df725b',
+  window: '#5b7da6',
+  windowSel: '#3f6798',
+  handle: '#df725b',
+  accentFill: 'rgba(40,127,106,0.94)',
+  accentStroke: 'rgba(40,127,106,0.72)',
+  scalePick: '#d9a33f',
+  furnFill: 'rgba(103,121,113,0.20)',
+  furnStroke: '#71867d',
+  wallMountStroke: '#287f6a',
+  furnLabel: '#344942',
+  furnSel: '#df725b',
+  furnGhost: 'rgba(102,121,114,0.35)',
+  warn: '#c95446',
+  glow: 'rgba(40,127,106,0.30)',
 };
 
 const SNAP_PX = 12;            // endpoint snap radius (screen px)
@@ -70,8 +68,8 @@ function resize() {
 
 window.addEventListener('resize', resize);
 
-// Build a "blueprint" version of the uploaded plan: dark pixels (wall lines,
-// text, symbols) become glowing cyan; light background becomes transparent.
+// Build a clean reference-line version of the uploaded plan: dark pixels (wall
+// lines, text, symbols) become graphite; light background becomes transparent.
 // Returns an offscreen canvas the same size as the source image.
 export function buildOutline(img, threshold = 120) {
   const w = img.naturalWidth, h = img.naturalHeight;
@@ -87,8 +85,8 @@ export function buildOutline(img, threshold = 120) {
     return null;
   }
   const px = data.data;
-  // Edge color: light graphite (ThinkPad-style, understated technical line).
-  const R = 215, G = 219, B = 224;
+  // Edge color: subdued green graphite on the warm canvas.
+  const R = 90, G = 109, B = 101;
   for (let i = 0; i < px.length; i += 4) {
     const lum = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
     if (lum < threshold) {

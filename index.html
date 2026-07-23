@@ -1,252 +1,156 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>RoomWalk · design &amp; walk your floor plan</title>
-<meta name="description" content="Upload a floor plan or build from scratch, place to-scale furniture, then walk through your space in 3D, right in the browser." />
-<link rel="icon" href="favicon.svg" type="image/svg+xml" />
-<meta property="og:title" content="RoomWalk" />
-<meta property="og:description" content="Upload a floor plan or build from scratch, place to-scale furniture, then walk through your space in 3D, right in the browser." />
-<meta property="og:type" content="website" />
-<meta property="og:url" content="https://roomwalk.pages.dev/" />
-<meta name="twitter:card" content="summary" />
-<link rel="stylesheet" href="styles.css" />
-<script type="importmap">
-{
-  "imports": {
-    "three": "./vendor/three/three.module.min.js",
-    "three/addons/": "./vendor/three/addons/"
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RoomWalk · design &amp; walk your floor plan</title>
+  <meta name="description" content="Upload a floor plan, place to-scale furniture, and walk through your space in 3D in the browser." />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <meta property="og:title" content="RoomWalk" />
+  <meta property="og:description" content="Upload a floor plan, place to-scale furniture, and walk through your space in 3D in the browser." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://roomwalk.pages.dev/" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="stylesheet" href="styles.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/three.module.min.js",
+      "three/addons/": "./vendor/three/addons/"
+    }
   }
-}
-</script>
+  </script>
 </head>
 <body>
   <header class="topbar">
     <div class="brand-group">
-      <span class="brand">RoomWalk</span>
-      <div class="dropdown">
-        <button id="help-btn" class="ghost">How to use ▾</button>
-        <div class="dropdown-menu help-menu" id="help-menu" hidden>
-          <div class="help-section">
-            <h4>Getting around</h4>
-            <p>Everything lives around the edges of the screen:</p>
-            <ul>
-              <li>Your tools (Pan, Wall, Door, Window, Items) sit on the left, and they show up when you're in the 2D view.</li>
-              <li>Switch between <b>2D</b>, <b>3D</b>, and <b>Walk</b> with the buttons up top.</li>
-              <li><b>Advanced</b> (top right) is where detection, scaling, and the clear options live, and the readout next to it shows your footprint and floor area.</li>
-            </ul>
-          </div>
-          <div class="help-section">
-            <h4><span class="step">1 ·</span> Upload your plan</h4>
-            <p>Two ways to get started:</p>
-            <ul>
-              <li>Upload your floor plan in strict 2D format with the <b>Upload</b> button (top right). It shows up as a clean blueprint outline, and if it's a multi-page PDF, you'll pick which page is your plan.</li>
-              <li>No 2D plan? Hit <b>Start from scratch</b> to draw on a blank grid. That's handy if all you have is a 3D or listing render, so keep it open for reference and rebuild the layout yourself.</li>
-            </ul>
-          </div>
-          <div class="help-section">
-            <h4><span class="step">2 ·</span> Detect &amp; fix the layout</h4>
-            <p>Once it's uploaded or drawn, head to <b>Advanced</b> and run detection in this order:</p>
-            <ul>
-              <li>Run <b>ML Detect Doors &amp; Windows (Beta)</b> first, then detect the walls, so the walls fit themselves around the openings.</li>
-              <li>You get two ways to find walls. <b>Detect walls</b> is the standard finder that traces the solid straight lines on the plan, and it's usually best on clean blueprints. <b>ML Detect Walls (Beta)</b> uses a machine-learning model that can catch trickier or thinner interior walls the standard one misses. They do the same job, so if one gives you a messy result, just run the other instead.</li>
-              <li>The ML options are beta, so they can be finnicky. However you detect, you can fix anything in the 2D view: drag the endpoints of doors, walls, and windows, drag a whole wall to shift it, or slide doors and windows along their walls.</li>
-              <li>If detection really misses the mark, just draw the walls, doors, and windows yourself with the tools on the left.</li>
-            </ul>
-          </div>
-          <div class="help-section">
-            <h4><span class="step">3 ·</span> Scale it to life-size</h4>
-            <p>Once the doors, walls, and windows are in the right places, scale your floor plan so it's life-sized. Two ways:</p>
-            <ul>
-              <li>Input a total sqft amount, and the whole plan scales to match.</li>
-              <li>Or select a wall and size it to what the matching wall on the floor plan says. Using the longest wall gives you the best accuracy.</li>
-            </ul>
-            <p>The readout in the top right shows your footprint and floor area so you can double-check it. When the layout's set, head to the <b>Design</b> menu to furnish and style it.</p>
-          </div>
-          <div class="help-section credits">
-            <h4>Credits</h4>
-            <p>RoomWalk is built on open-source work:</p>
-            <ul>
-              <li>3D rendering by <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT).</li>
-              <li>On-device detection runs on <a href="https://onnxruntime.ai/" target="_blank" rel="noopener">ONNX Runtime Web</a> (MIT).</li>
-              <li>PDF reading by <a href="https://mozilla.github.io/pdf.js/" target="_blank" rel="noopener">PDF.js</a> (Apache 2.0).</li>
-              <li>The wall &amp; door detection models were trained on floor-plan datasets from <a href="https://roboflow.com/" target="_blank" rel="noopener">Roboflow</a> (CC BY 4.0).</li>
-            </ul>
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M4 4v16h16V8h-8V4z"/><path d="M12 4v9h8M4 13h8M8 13v7"/>
+        </svg>
+      </div>
+      <div class="brand-copy">
+        <span class="brand">RoomWalk</span>
+        <span class="save-status"><i></i>Autosaved locally</span>
+      </div>
+      <nav class="guide-links" aria-label="Help and guides">
+        <div class="dropdown">
+          <button id="help-btn" class="utility-btn">Guide</button>
+          <div class="dropdown-menu help-menu" id="help-menu" hidden>
+            <div class="menu-intro">
+              <span class="menu-kicker">Quick start</span>
+              <h3>From plan to walkthrough</h3>
+              <p>RoomWalk automatically finds walls, doors, and windows after you import a plan. Review the result, set its scale, then furnish it.</p>
+            </div>
+            <div class="guide-step"><b>1</b><div><strong>Import or draw</strong><span>Upload an image/PDF, or start from a one-foot grid.</span></div></div>
+            <div class="guide-step"><b>2</b><div><strong>Review and scale</strong><span>Correct the detected layout, then use either scale method in the right panel.</span></div></div>
+            <div class="guide-step"><b>3</b><div><strong>Design and explore</strong><span>Add furniture and finishes, then switch to 3D or Walk.</span></div></div>
           </div>
         </div>
-      </div>
-      <div class="dropdown">
-        <button id="design-btn" class="ghost">Design ▾</button>
-        <div class="dropdown-menu help-menu" id="design-menu" hidden>
-          <div class="help-section">
-            <h4>Furnish it</h4>
-            <p>Click <b>Items</b>, pick a piece, then drop it onto the plan (works in 2D, 3D, or Walk):</p>
-            <ul>
-              <li>Drag a piece to move it, use the handles or the side panel to resize, and hit <kbd>R</kbd> to rotate or <kbd>Delete</kbd> to remove.</li>
-              <li>Items stop at walls instead of passing through, and a red ⚠ means it's overlapping something, so just nudge it clear.</li>
-              <li>Wall items like cabinets, shelves, TVs, and mirrors snap onto a wall. Slide them along it, and use <b>Height −/+</b> in the panel to raise or lower them.</li>
-            </ul>
-          </div>
-          <div class="help-section">
-            <h4>Recolour &amp; style</h4>
-            <p>Select something and the side panel gives you its look:</p>
-            <ul>
-              <li>Click a wall (in 2D or 3D) to set its colour with the colour picker, or hit <b>Reset</b> to put it back.</li>
-              <li>In 3D, click a room's floor to pick its material (wood, tile, carpet, or concrete), so different rooms can look different.</li>
-            </ul>
-          </div>
-          <div class="help-section">
-            <h4>Hide things</h4>
-            <p>Select any wall, door, window, or item and hit <b>Hide</b> in the panel to make it see-through and click-through.</p>
-            <ul>
-              <li>Handy for reaching past a near wall to place something on the far one. It stays faintly visible, so you can click it again to bring it back.</li>
-              <li>To un-hide everything at once, use <b>Advanced &rarr; Show all hidden</b>.</li>
-            </ul>
-          </div>
-          <div class="help-section">
-            <h4>Delete &amp; clear</h4>
-            <ul>
-              <li>Select anything and press <kbd>Delete</kbd> (or the <b>Delete</b> button) to remove it. Deleting a door or window that fills a gap reopens the gap, so you won't be left with a solid wall.</li>
-              <li>To wipe a whole category, use <b>Advanced &rarr; Clear walls / Clear doors/windows / Clear furniture</b>, and <b>Reset everything</b> starts you over.</li>
-            </ul>
-          </div>
-          <div class="help-section">
-            <h4>View &amp; walk through</h4>
-            <ul>
-              <li>Switch to <b>3D</b> to orbit your place (drag to look, scroll to zoom).</li>
-              <li>Or <b>Walk</b> mode to walk through it at eye height. Use <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or the arrow keys to move, and <kbd>Q</kbd>/<kbd>E</kbd> to turn.</li>
-              <li>Your work autosaves in the browser. You can also hit <b>Save</b> to download the whole project as a file and open it again later.</li>
-            </ul>
+        <div class="dropdown">
+          <button id="design-btn" class="utility-btn">Design tips</button>
+          <div class="dropdown-menu help-menu" id="design-menu" hidden>
+            <div class="menu-intro">
+              <span class="menu-kicker">Furnish and style</span>
+              <h3>Make the plan feel like home</h3>
+              <p>Select <b>Items</b>, choose a piece, and click anywhere in 2D, 3D, or Walk to place it.</p>
+            </div>
+            <div class="tip-list">
+              <p><b>Resize:</b> drag item handles or use the selection panel. Press <kbd>R</kbd> to rotate.</p>
+              <p><b>Style:</b> select a wall to recolour it, or a room in 3D to change its floor.</p>
+              <p><b>Reach behind walls:</b> select an object and choose Hide. Use “Show hidden objects” in the right panel to restore everything.</p>
+              <p><b>Delete:</b> select anything and press <kbd>Delete</kbd>, or use the selection panel.</p>
+            </div>
           </div>
         </div>
-      </div>
-      <div class="dropdown">
-        <button id="keys-btn" class="ghost">Shortcuts ▾</button>
-        <div class="dropdown-menu help-menu" id="keys-menu" hidden>
-          <div class="help-section">
-            <h4>Tools (in 2D)</h4>
-            <ul class="keys-list">
-              <li><kbd>V</kbd> Pan, select &amp; move</li>
-              <li><kbd>W</kbd> Wall tool</li>
-              <li><kbd>D</kbd> Door tool</li>
-              <li><kbd>R</kbd> Window tool</li>
-              <li><kbd>I</kbd> Items (furniture)</li>
-            </ul>
-          </div>
-          <div class="help-section">
-            <h4>Editing</h4>
-            <ul class="keys-list">
-              <li><kbd>R</kbd> Rotate the selected item 90&deg;</li>
-              <li><kbd>Delete</kbd> / <kbd>Backspace</kbd> Delete what's selected</li>
-              <li><kbd>Esc</kbd> Unselect, or cancel placing an item</li>
-              <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> Undo</li>
-              <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> Redo</li>
-            </ul>
-          </div>
-          <div class="help-section">
-            <h4>Views</h4>
-            <ul class="keys-list">
-              <li><kbd>1</kbd> 2D &nbsp; <kbd>2</kbd> 3D &nbsp; <kbd>3</kbd> Walk</li>
-            </ul>
-          </div>
-          <div class="help-section">
-            <h4>Walk mode</h4>
-            <ul class="keys-list">
-              <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrow keys to move</li>
-              <li><kbd>Q</kbd> / <kbd>E</kbd> to turn, click-drag to look</li>
-            </ul>
+        <div class="dropdown">
+          <button id="keys-btn" class="utility-btn">Shortcuts</button>
+          <div class="dropdown-menu keys-menu" id="keys-menu" hidden>
+            <div class="menu-kicker">Keyboard shortcuts</div>
+            <div class="key-row"><span>Select / pan</span><kbd>V</kbd></div>
+            <div class="key-row"><span>Wall · Door · Window</span><span><kbd>W</kbd> <kbd>D</kbd> <kbd>R</kbd></span></div>
+            <div class="key-row"><span>Items</span><kbd>I</kbd></div>
+            <div class="key-row"><span>2D · 3D · Walk</span><span><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></span></div>
+            <div class="key-row"><span>Undo / redo</span><span><kbd>Ctrl Z</kbd> <kbd>Ctrl Shift Z</kbd></span></div>
+            <div class="key-row"><span>Delete selection</span><kbd>Delete</kbd></div>
           </div>
         </div>
-      </div>
+      </nav>
     </div>
+
     <div class="view-toggle" role="tablist" aria-label="View">
-      <button data-view="2d" class="active">2D</button>
+      <button data-view="2d" class="active">2D Plan</button>
       <button data-view="3d">3D</button>
       <button data-view="walk">Walk</button>
     </div>
-    <div id="esc-hint" class="esc-hint" hidden>Hit <kbd>Esc</kbd> to deselect</div>
+
+    <div id="esc-hint" class="esc-hint" hidden>Press <kbd>Esc</kbd> to deselect</div>
+
     <div class="topbar-right">
-      <label class="file-btn">
-        Upload floor plan
-        <input type="file" id="file-input" accept="image/*,application/pdf,.pdf" hidden />
-      </label>
-      <button id="scratch-btn" class="ghost">Start from scratch</button>
-      <span class="topbar-sep"></span>
-      <span class="btn-group">
-        <button id="undo-btn" class="ghost icon-btn" title="Undo (Ctrl+Z)">↶</button>
-        <button id="redo-btn" class="ghost icon-btn" title="Redo (Ctrl+Shift+Z)">↷</button>
+      <span class="btn-group history-group">
+        <button id="undo-btn" class="icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 7 4 12l5 5"/><path d="M5 12h8a6 6 0 0 1 6 6"/></svg>
+        </button>
+        <button id="redo-btn" class="icon-btn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m15 7 5 5-5 5"/><path d="M19 12h-8a6 6 0 0 0-6 6"/></svg>
+        </button>
       </span>
-      <span class="btn-group">
-        <button id="open-btn" class="ghost">Open</button>
-        <button id="save-btn" class="ghost">Save</button>
+      <span class="btn-group file-group">
+        <button id="open-btn" class="soft-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5h6l2 3h8v11z"/></svg>
+          <span>Open</span>
+        </button>
+        <button id="save-btn" class="soft-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h12l2 2v14H5z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/></svg>
+          <span>Save</span>
+        </button>
       </span>
       <input type="file" id="open-input" accept=".json,application/json" hidden />
-      <div class="dropdown">
-        <button id="advanced-btn" class="ghost">Advanced ▾</button>
-        <div class="dropdown-menu" id="advanced-menu" hidden>
-          <div class="menu-sec">Detect</div>
-          <button data-action="detect-dw-ml">ML Detect Doors &amp; Windows (Beta)</button>
-          <button data-action="detect-walls">Detect walls</button>
-          <button data-action="detect-walls-ml">ML Detect Walls (Beta)</button>
-
-          <div class="menu-sec">Scale &amp; units</div>
-          <button data-action="set-scale">Set scale by dimension…</button>
-          <button data-action="calibrate-sqft">Set scale by square footage…</button>
-          <label class="row">
-            <span>Units</span>
-            <select id="units-select">
-              <option value="imperial">Feet / inches</option>
-              <option value="metric">Meters</option>
-            </select>
-          </label>
-          <label class="row">
-            <span id="wall-height-label">Wall height (ft)</span>
-            <input type="number" id="wall-height" min="6" max="14" step="0.5" value="9" />
-          </label>
-
-          <div class="menu-sec">Canvas</div>
-          <label class="row">
-            <span>Snap to grid (1 ft)</span>
-            <input type="checkbox" id="grid-mode" />
-          </label>
-          <label class="row" id="debug-detect-row" hidden>
-            <span>Show detection debug</span>
-            <input type="checkbox" id="debug-detect" />
-          </label>
-          <label class="row">
-            <span>Plan opacity</span>
-            <input type="range" id="opacity" min="0" max="100" value="85" />
-          </label>
-          <button data-action="show-hidden">Show all hidden</button>
-
-          <div class="menu-sec">Clear</div>
-          <button data-action="clear-walls">Clear walls</button>
-          <button data-action="clear-openings">Clear doors/windows</button>
-          <button data-action="clear-furniture">Clear furniture</button>
-          <button data-action="reset-all" class="danger">Reset everything</button>
-        </div>
-      </div>
+      <button id="scratch-btn" class="soft-btn scratch-btn" title="Begin with a blank one-foot grid">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4zM4 10h16M10 4v16"/></svg>
+        <span>Blank plan</span>
+      </button>
+      <label class="file-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4m0 0L8 8m4-4 4 4"/><path d="M5 14v5h14v-5"/></svg>
+        <span>Import plan</span>
+        <input type="file" id="file-input" accept="image/*,application/pdf,.pdf" hidden />
+      </label>
+      <button id="advanced-btn" class="icon-btn panel-toggle active" title="Toggle plan panel" aria-label="Toggle plan panel" aria-expanded="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v14H4zM14 5v14"/><path d="M17 9h1M17 12h1M17 15h1"/></svg>
+      </button>
     </div>
   </header>
 
-  <aside class="toolbar" id="toolbar">
-    <button class="tool active" data-tool="pan" title="Pan, select, move &amp; resize (V)">
-      <span class="ico">✥</span><span>Pan</span><span class="key">V</span>
+  <aside class="toolbar" id="toolbar" aria-label="Drawing tools">
+    <div class="toolbar-label">Create</div>
+    <button class="tool active" data-tool="pan" title="Select, pan, move and resize (V)">
+      <span class="key">V</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m5 3 12 9-6 1.5L8.5 19z"/></svg>
+      <span> Select </span>
     </button>
     <button class="tool" data-tool="wall" title="Draw wall: click two points (W)">
-      <span class="ico">▱</span><span>Wall</span><span class="key">W</span>
+      <span class="key">W</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5h16v14"/><path d="M4 10h16M9 5v5m6 0v9M4 15h11"/></svg>
+      <span>Wall</span>
     </button>
-    <button class="tool" data-tool="door" title="Place door on wall (D)">
-      <span class="ico">⌐</span><span>Door</span><span class="key">D</span>
+    <button class="tool" data-tool="door" title="Place door on a wall (D)">
+      <span class="key">D</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 20V4h11v16"/><path d="M16 20A11 11 0 0 0 5 9"/><circle cx="13" cy="12" r=".8" fill="currentColor"/></svg>
+      <span>Door</span>
     </button>
-    <button class="tool" data-tool="window" title="Place window on wall (R)">
-      <span class="ico">▭</span><span>Window</span><span class="key">R</span>
+    <button class="tool" data-tool="window" title="Place window on a wall (R)">
+      <span class="key">R</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="5" width="16" height="14" rx="1"/><path d="M12 5v14M4 12h16"/></svg>
+      <span>Window</span>
     </button>
-    <button class="tool" data-tool="furniture" title="Place furniture &amp; fixtures (I)">
-      <span class="ico">🛋</span><span>Items</span><span class="key">I</span>
+    <div class="rail-rule"></div>
+    <div class="toolbar-label">Design</div>
+    <button class="tool" data-tool="furniture" title="Place furniture and fixtures (I)">
+      <span class="key">I</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14v7H5z"/><path d="M7 12V8h4a2 2 0 0 1 2 2v2m0 0v-2a2 2 0 0 1 2-2h2v4M7 19v2m10-2v2"/></svg>
+      <span>Items</span>
     </button>
-    <div class="divider"></div>
+    <div class="toolbar-spacer"></div>
     <div class="scale-info" id="scale-info">No scale set</div>
   </aside>
 
@@ -256,29 +160,31 @@
       <div class="tip-title" id="tip-title"></div>
       <div class="tip-body" id="tip-body"></div>
     </div>
+
     <div class="palette" id="palette" hidden>
       <div class="palette-head">
-        <span>Items <span class="palette-hint">click, then click on the plan · R rotates</span></span>
-        <button id="palette-close" class="palette-close" title="Close (switches to Pan)" aria-label="Close palette">×</button>
+        <div><b>Items</b><span class="palette-hint">Choose an item, then click the plan · R rotates</span></div>
+        <button id="palette-close" class="palette-close" title="Close items" aria-label="Close items">×</button>
       </div>
       <div class="palette-body" id="palette-body"></div>
     </div>
-    <div class="readout" id="readout" hidden>
-      <div class="readout-row"><span>Scale</span><b id="ro-scale">–</b></div>
-      <div class="readout-row"><span>Footprint</span><b id="ro-foot">–</b></div>
-      <div class="readout-row readout-area"><span>Floor area</span><b id="ro-area">–</b></div>
-    </div>
+
     <div id="view-2d" class="view active">
       <canvas id="canvas2d"></canvas>
       <div class="hint welcome" id="hint-2d">
-        <div class="welcome-title">Design &amp; walk your space</div>
-        <div class="welcome-sub">Upload a floor plan to trace over, or start on a blank grid.</div>
+        <span class="welcome-kicker">Start a new space</span>
+        <div class="welcome-title">Design and walk your floor plan</div>
+        <div class="welcome-sub">Import a plan and RoomWalk will automatically detect its walls, doors, and windows. Or begin with a blank one-foot grid.</div>
         <div class="welcome-actions">
-          <button id="welcome-upload" class="file-btn">Upload floor plan</button>
-          <button id="welcome-scratch" class="ghost">Start from scratch</button>
+          <button id="welcome-upload" class="file-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4m0 0L8 8m4-4 4 4"/><path d="M5 14v5h14v-5"/></svg>
+            Import floor plan
+          </button>
+          <button id="welcome-scratch" class="soft-btn">Start blank</button>
         </div>
       </div>
     </div>
+
     <div id="view-3d" class="view">
       <canvas id="canvas3d"></canvas>
       <div class="hint" id="hint-3d">Drag to orbit · scroll to zoom · right-drag to pan</div>
@@ -303,7 +209,7 @@
       <div class="ip-row" id="ip-wall" hidden>
         <span class="ip-axis">Colour</span>
         <input type="color" id="ip-wall-color" />
-        <button data-act="wall-reset" class="ghost">Reset</button>
+        <button data-act="wall-reset" class="soft-btn">Reset</button>
       </div>
       <div class="ip-row" id="ip-room" hidden>
         <span class="ip-axis">Floor</span>
@@ -315,15 +221,135 @@
         </select>
       </div>
       <div class="ip-actions">
-        <button data-act="rotate">⟳ Rotate</button>
+        <button data-act="rotate">↻ Rotate</button>
         <button data-act="hide">Hide</button>
         <button data-act="delete" class="danger">Delete</button>
       </div>
     </div>
   </main>
 
+  <aside class="inspector" id="plan-inspector">
+    <div class="inspector-head">
+      <div>
+        <span class="inspector-kicker">Project</span>
+        <h2>Plan overview</h2>
+      </div>
+      <span class="inspector-live"><i></i>Live</span>
+    </div>
+
+    <div class="inspector-scroll" id="advanced-menu">
+      <section class="panel-section">
+        <button class="section-head" type="button">
+          <span>Plan summary</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 10 5 5 5-5"/></svg>
+        </button>
+        <div class="section-body">
+          <div class="readout" id="readout">
+            <div class="summary-card summary-primary">
+              <span>Floor area</span><b id="ro-area">–</b>
+            </div>
+            <div class="summary-pair">
+              <div class="summary-card"><span>Footprint</span><b id="ro-foot">–</b></div>
+              <div class="summary-card"><span>Scale</span><b id="ro-scale">not set</b></div>
+            </div>
+          </div>
+
+          <div class="calibration-box">
+            <div class="box-heading">
+              <span>Size floor plan to scale</span>
+              <small>Choose either method</small>
+            </div>
+            <button class="panel-action prominent" data-action="calibrate-sqft">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4z"/><path d="M8 8h8v8H8z"/></svg>
+              <span><b>Use total floor area</b><small>Enter the listing’s total sq ft or m²</small></span>
+            </button>
+            <div class="or-rule"><span>or</span></div>
+            <button class="panel-action" data-action="set-scale">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17 17 4l3 3L7 20H4z"/><path d="m12 9 3 3M8 13l3 3"/></svg>
+              <span><b>Use a known wall</b><small>Click a wall, then enter its real length</small></span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-section">
+        <button class="section-head" type="button">
+          <span>Automatic detection</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 10 5 5 5-5"/></svg>
+        </button>
+        <div class="section-body">
+          <div class="ml-status" id="ml-status">
+            <span class="ml-status-icon" id="ml-status-dot">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 1.5 4.2L18 9l-4.5 1.8L12 15l-1.5-4.2L6 9l4.5-1.8z"/><path d="m18 14 .8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8z"/></svg>
+            </span>
+            <span><b id="ml-status-title">Runs after import</b><small id="ml-status-copy">Walls, doors, and windows are found automatically on this device.</small></span>
+          </div>
+          <div class="detect-actions">
+            <button class="panel-action compact" data-action="detect-walls-ml">Retry ML walls <span class="beta">BETA</span></button>
+            <button class="panel-action compact" data-action="detect-dw-ml">Retry doors &amp; windows <span class="beta">BETA</span></button>
+            <button class="text-action" data-action="detect-walls">Try standard wall detection instead</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel-section">
+        <button class="section-head" type="button">
+          <span>Canvas appearance</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 10 5 5 5-5"/></svg>
+        </button>
+        <div class="section-body settings-body">
+          <label class="field">
+            <span>Units</span>
+            <select id="units-select">
+              <option value="imperial">Feet / inches</option>
+              <option value="metric">Meters</option>
+            </select>
+          </label>
+          <label class="field">
+            <span id="wall-height-label">Wall height (ft)</span>
+            <input type="number" id="wall-height" min="6" max="14" step="0.5" value="9" />
+          </label>
+          <label class="field range-field">
+            <span>Plan opacity <output id="opacity-output">85%</output></span>
+            <input type="range" id="opacity" min="0" max="100" value="85" />
+          </label>
+          <label class="switch-row">
+            <span><b>Snap to one-foot grid</b><small>Available when drawing from scratch</small></span>
+            <input type="checkbox" id="grid-mode" />
+          </label>
+          <label class="switch-row" id="debug-detect-row" hidden>
+            <span><b>Detection debug overlay</b><small>Developer visualization</small></span>
+            <input type="checkbox" id="debug-detect" />
+          </label>
+          <button class="text-action align-left" data-action="show-hidden">Show all hidden objects</button>
+        </div>
+      </section>
+
+      <section class="panel-section remove-section">
+        <button class="section-head" type="button">
+          <span>Remove</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 10 5 5 5-5"/></svg>
+        </button>
+        <div class="section-body remove-actions">
+          <button class="remove-btn" data-action="clear-doors">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 20V4h11v16"/><path d="M16 20A11 11 0 0 0 5 9"/></svg>
+            <span><b>Remove doors</b><small>Windows and walls stay in place</small></span>
+          </button>
+          <button class="remove-btn" data-action="clear-walls">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V5h16v14M4 10h16M9 5v5m6 0v9"/></svg>
+            <span><b>Remove walls</b><small>Also clears attached doors and windows</small></span>
+          </button>
+          <button class="remove-btn danger" data-action="reset-all">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13"/><path d="M10 11v5m4-5v5"/></svg>
+            <span><b>Remove everything</b><small>Reset the plan, furniture, and imported image</small></span>
+          </button>
+        </div>
+      </section>
+    </div>
+  </aside>
+
   <div class="walk-hud" id="walk-hud" hidden>
-    <div class="walk-instructions">Click + drag to look · WASD / arrows to move</div>
+    <div class="walk-instructions">Click + drag to look · WASD / arrows to move · Q / E to turn</div>
   </div>
   <div class="walk-paused" id="walk-paused" hidden></div>
 
@@ -332,21 +358,22 @@
       <div class="modal-title" id="modal-title">Calibrate</div>
       <div class="modal-body" id="modal-body"></div>
       <div class="modal-actions">
-        <button id="modal-cancel" class="ghost">Cancel</button>
-        <button id="modal-ok">OK</button>
+        <button id="modal-cancel" class="soft-btn">Cancel</button>
+        <button id="modal-ok">Continue</button>
       </div>
     </div>
   </div>
 
   <div class="toast" id="toast" hidden></div>
 
-  <!-- Shown only on small (phone-sized) screens. Tablets and up get the full UI. -->
   <div class="smallscreen-note" id="smallscreen-note" hidden>
     <div class="ssn-card">
-      <div class="ssn-title">Best on a bigger screen</div>
-      <p>RoomWalk is built for a desktop or tablet. You can look around on a phone,
-         but tracing and furnishing need more room to work comfortably.</p>
-      <button id="ssn-dismiss" class="file-btn">Got it</button>
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4v16h16V8h-8V4z"/><path d="M12 4v9h8M4 13h8M8 13v7"/></svg>
+      </div>
+      <div class="ssn-title">RoomWalk works best with room to draw</div>
+      <p>You can look around on a phone, but tracing and furnishing are more comfortable on a tablet or desktop.</p>
+      <button id="ssn-dismiss" class="file-btn">Continue anyway</button>
     </div>
   </div>
 

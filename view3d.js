@@ -19,8 +19,8 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping; // richer, less blown-out lo
 renderer.toneMappingExposure = 1.15;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x181b22);
-scene.fog = new THREE.Fog(0x181b22, 60, 250);
+scene.background = new THREE.Color(0xe8eee9);
+scene.fog = new THREE.Fog(0xe8eee9, 60, 250);
 
 const ORBIT_FOV = 50;
 const WALK_FOV = 75;
@@ -706,7 +706,7 @@ const _ndc = new THREE.Vector2();
 const _floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const _hitPt = new THREE.Vector3();
 const ghostMat = new THREE.MeshStandardMaterial({ color: 0xc7d6f8, transparent: true, opacity: 0.45, depthWrite: false });
-const matHandle = new THREE.MeshBasicMaterial({ color: 0x5b8def, depthTest: false });
+const matHandle = new THREE.MeshBasicMaterial({ color: 0xdf725b, depthTest: false });
 const HANDLE_R = 0.5; // ft
 
 let ghost = null;          // { type, rot, group }
@@ -832,7 +832,7 @@ function buildOpeningProxy(o) {
   const wall = state.walls.find(w => w.id === o.wallId);
   if (!wall) return null;
   const sel = state.selection?.kind === 'opening' && state.selection.id === o.id;
-  const mat = new THREE.MeshBasicMaterial({ color: 0x5b8def, transparent: true, opacity: sel ? 0.16 : 0.0, depthWrite: false });
+  const mat = new THREE.MeshBasicMaterial({ color: 0xdf725b, transparent: true, opacity: sel ? 0.16 : 0.0, depthWrite: false });
   const ry = -wallAngle(wall);
   const depth = WALL_THICKNESS_FT + 0.1;
 

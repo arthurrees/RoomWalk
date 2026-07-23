@@ -1,7 +1,7 @@
 // Main entry: wires DOM UI to state and the 2D/3D views.
 import {
   state, subscribe, emit, setTool, setView, setScale, resetAll, reseedIds,
-  clearWalls, clearOpenings, clearFurniture, deleteSelection, armFurniture,
+  clearWalls, clearDoors, clearOpenings, clearFurniture, deleteSelection, armFurniture,
   replaceWalls, setDetectedWalls, setMLOpenings, toggleHidden, showAllHidden, closePalette,
 } from './state.js';
 import { detectWalls, detectWallsML, detectDoorsWindowsML } from './detect.js';
@@ -193,8 +193,8 @@ fileInput.addEventListener('change', async (e) => {
       if (!result) return; // user cancelled the page picker
       loadImageDataUrl(result.dataUrl,
         result.pageCount > 1
-          ? `PDF page ${result.pageNum} of ${result.pageCount} loaded. Trace the walls with the Wall tool.`
-          : 'PDF loaded. Trace the walls with the Wall tool.');
+          ? `PDF page ${result.pageNum} of ${result.pageCount} loaded.`
+          : 'PDF loaded.');
       return;
     }
   } catch (err) {
@@ -206,18 +206,19 @@ fileInput.addEventListener('change', async (e) => {
   fileInput.value = '';
   // Image path: read as a data URL so it can be embedded when saving the project.
   const reader = new FileReader();
-  reader.onload = () => loadImageDataUrl(reader.result, 'Floor plan loaded. Trace the walls with the Wall tool.');
+  reader.onload = () => loadImageDataUrl(reader.result, 'Floor plan loaded.');
   reader.readAsDataURL(file);
 });
 
 function loadImageDataUrl(dataUrl, message) {
   const img = new Image();
-  img.onload = () => {
+  img.onload = async () => {
     const outline = view2d.buildOutline(img, state.outlineThreshold);
     state.image = { el: img, w: img.naturalWidth, h: img.naturalHeight, outline, dataUrl };
     view2d.fitImage();
     emit();
     if (message) toast(message);
+    await runAutomaticMLDetection(img);
   };
   img.src = dataUrl;
 }
@@ -356,6 +357,7 @@ function applyProject(data, doneMsg = 'Project loaded.') {
   // sync UI controls to the loaded state
   unitsSelect.value = state.units; syncUnitsUI(); buildPalette();
   opacitySlider.value = Math.round(state.imageOpacity * 100);
+  if (opacityOutput) opacityOutput.textContent = `${opacitySlider.value}%`;
   gridToggle.checked = state.grid;
 
   const finish = () => {
@@ -478,26 +480,42 @@ const redoBtn = document.getElementById('redo-btn');
 undoBtn.addEventListener('click', undo);
 redoBtn.addEventListener('click', redo);
 
-// --- Advanced dropdown ---
+// --- Right-side plan inspector ---
 const advBtn = document.getElementById('advanced-btn');
 const advMenu = document.getElementById('advanced-menu');
-advBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
-  advMenu.hidden = !advMenu.hidden;
+advBtn.addEventListener('click', () => {
+  const closed = document.body.classList.toggle('inspector-hidden');
+  advBtn.classList.toggle('active', !closed);
+  advBtn.setAttribute('aria-expanded', String(!closed));
+  // Both canvas renderers size from their container; recalculate after the grid
+  // column changes rather than waiting for the next browser resize.
+  requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
 });
-document.addEventListener('click', (e) => {
-  if (!advMenu.contains(e.target) && e.target !== advBtn) advMenu.hidden = true;
+
+advMenu.querySelectorAll('.section-head').forEach(b => {
+  b.addEventListener('click', () => b.closest('.panel-section')?.classList.toggle('collapsed'));
 });
+
 advMenu.querySelectorAll('button[data-action]').forEach(b => {
-  b.addEventListener('click', () => {
+  b.addEventListener('click', async () => {
     const a = b.dataset.action;
-    advMenu.hidden = true;
     if (a === 'set-scale') startSetScale();
     else if (a === 'calibrate-sqft') openCalibrateSqft();
     else if (a === 'detect-walls') runDetectWallsHeuristic();
-    else if (a === 'detect-walls-ml') runDetectWallsML();
-    else if (a === 'detect-dw-ml') runDetectDoorsWindowsML();
-    else if (a === 'clear-walls') { clearWalls(); toast('Walls cleared'); }
+    else if (a === 'detect-walls-ml') await runDetectWallsML();
+    else if (a === 'detect-dw-ml') await runDetectDoorsWindowsML();
+    else if (a === 'clear-doors') {
+      if (confirm('Remove every door? Windows and walls will stay in place.')) {
+        clearDoors();
+        toast('Doors removed.');
+      }
+    }
+    else if (a === 'clear-walls') {
+      if (confirm('Remove every wall? Attached doors and windows will also be removed.')) {
+        clearWalls();
+        toast('Walls removed.');
+      }
+    }
     else if (a === 'clear-openings') { clearOpenings(); toast('Doors/windows cleared'); }
     else if (a === 'clear-furniture') { clearFurniture(); toast('Furniture cleared'); }
     else if (a === 'show-hidden') { showAllHidden(); toast('All hidden objects shown'); }
@@ -514,6 +532,7 @@ function runDetectWallsHeuristic() {
   let walls = [];
   try { walls = detectWalls(state.image.el); } catch (err) { console.error(err); }
   if (!walls.length) {
+    setMLStatus('error', 'Walls need review', 'Standard detection did not find walls. Draw them manually.');
     toast('Couldn’t detect walls on this plan. Trace them with the Wall tool.', 5000);
     return;
   }
@@ -521,61 +540,137 @@ function runDetectWallsHeuristic() {
   if (state.view !== '2d') switchView('2d');
   const n = walls.length;
   const kept = state.openings.length;
+  setMLStatus('ready', 'Standard walls detected', `${n} wall${n === 1 ? '' : 's'} found. Doors and windows were kept.`);
   toast(`Detected ${n} wall${n === 1 ? '' : 's'}${kept ? `, kept ${kept} door/window${kept === 1 ? '' : 's'}` : ''}. Fix with the Wall tool.`, 5000);
 }
 
-// ML wall detection (on-device ONNX), lazy-loaded on first use; the heuristic
-// detector is the fallback. Re-runnable (replaces the wall set). Detect walls
-// FIRST, fix any with the Wall tool, then detect doors & windows — the openings
-// snap onto whatever walls exist, so better walls give better door placement.
-async function runDetectWallsML() {
-  if (!state.image?.el) { toast('Upload a floor plan first.'); return; }
-  toast('Detecting walls… (first run downloads the model)', 6000);
+const mlStatus = document.getElementById('ml-status');
+const mlStatusTitle = document.getElementById('ml-status-title');
+const mlStatusCopy = document.getElementById('ml-status-copy');
+
+function setMLStatus(kind, title, copy) {
+  if (!mlStatus) return;
+  mlStatus.classList.toggle('running', kind === 'running');
+  mlStatus.classList.toggle('error', kind === 'error');
+  mlStatusTitle.textContent = title;
+  mlStatusCopy.textContent = copy;
+}
+
+// ML wall detection (on-device ONNX), lazy-loaded on first use; the existing
+// heuristic detector remains the fallback. The detector itself lives in
+// detect.js and is called unchanged here.
+async function runDetectWallsML({ image = state.image?.el, automatic = false } = {}) {
+  if (!image) { toast('Upload a floor plan first.'); return null; }
+  if (!automatic) {
+    setMLStatus('running', 'Detecting walls…', 'The on-device wall model is running.');
+    toast('Detecting walls… (first run loads the model)', 6000);
+  }
   let walls = [];
-  try { walls = await detectWallsML(state.image.el); }
+  let usedFallback = false;
+  try { walls = await detectWallsML(image); }
   catch (err) { console.error(err); }
+  // A newer floor plan may have been imported while this async model was
+  // running. Never apply results to a different image.
+  if (state.image?.el !== image) return null;
   if (!walls.length) {
-    try { walls = detectWalls(state.image.el); } catch (err) { console.error(err); }
+    usedFallback = true;
+    try { walls = detectWalls(image); } catch (err) { console.error(err); }
   }
   if (!walls.length) {
-    toast('Couldn’t detect walls on this plan. Trace them with the Wall tool.', 5000);
-    return;
+    setMLStatus('error', 'Walls need review', 'No walls were found. Add them with the Wall tool.');
+    if (!automatic) toast('Couldn’t detect walls on this plan. Trace them with the Wall tool.', 5000);
+    return null;
   }
   setDetectedWalls(walls);   // preserves & re-homes any existing doors/windows
   if (state.view !== '2d') switchView('2d');
   const n = walls.length;
   const kept = state.openings.length;
-  toast(`Detected ${n} wall${n === 1 ? '' : 's'} (beta)${kept ? `, kept ${kept} door/window${kept === 1 ? '' : 's'}` : ''}. Fix with the Wall tool.`, 5000);
+  if (!automatic) {
+    setMLStatus('ready', 'Walls detected', `${n} wall${n === 1 ? '' : 's'} found${usedFallback ? ' with standard detection' : ' with ML'}.`);
+    toast(`Detected ${n} wall${n === 1 ? '' : 's'}${usedFallback ? '' : ' (beta)'}${kept ? `, kept ${kept} door/window${kept === 1 ? '' : 's'}` : ''}. Fix with the Wall tool.`, 5000);
+  }
+  return { count: n, usedFallback };
 }
 
 // ML door/window detection (on-device ONNX). Runs against the CURRENT walls and
 // snaps each detection onto the nearest same-orientation wall, so detect/trace
 // (and fix) walls first for the best placement. Re-runnable (replaces a prior run).
-async function runDetectDoorsWindowsML() {
-  if (!state.image?.el) { toast('Upload a floor plan first.'); return; }
-  toast('Detecting doors & windows… (first run downloads the model)', 6000);
+async function runDetectDoorsWindowsML({ image = state.image?.el, automatic = false } = {}) {
+  if (!image) { toast('Upload a floor plan first.'); return null; }
+  if (!automatic) {
+    setMLStatus('running', 'Detecting openings…', 'The on-device door and window model is running.');
+    toast('Detecting doors & windows… (first run loads the model)', 6000);
+  }
   // Detect doors/windows ONLY — never touches walls. If walls already exist, an
   // opening snaps onto a matching one (clean 3D hole); otherwise it's placed where
   // the model found it (like the spike). So this works with or without walls.
   const walls = state.walls.filter(w => !w.auto);
   const pxPerFt = state.scale ?? PX_PER_FT_FALLBACK;
   let items = [];
-  try { items = await detectDoorsWindowsML(state.image.el, walls, { pxPerFt }); }
-  catch (err) { console.error(err); toast('Door/window detection failed. Place them manually.', 4000); return; }
+  try { items = await detectDoorsWindowsML(image, walls, { pxPerFt }); }
+  catch (err) {
+    console.error(err);
+    if (state.image?.el === image) {
+      setMLStatus('error', 'Openings need review', 'Detection failed. Doors and windows can still be placed manually.');
+      if (!automatic) toast('Door/window detection failed. Place them manually.', 4000);
+    }
+    return null;
+  }
+  if (state.image?.el !== image) return null;
   if (!items.length) {
-    toast('No doors or windows found on the walls. Add them with the Door/Window tools.', 4500);
-    return;
+    setMLStatus('error', 'Openings need review', 'No doors or windows were found. Add them manually if needed.');
+    if (!automatic) toast('No doors or windows found. Add them with the Door/Window tools.', 4500);
+    return { count: 0, doors: 0, windows: 0 };
   }
   setMLOpenings(items);
   if (state.view !== '2d') switchView('2d');
   const dN = items.filter(i => i.type === 'door').length, wN = items.length - dN;
-  toast(`Detected ${dN} door${dN === 1 ? '' : 's'} and ${wN} window${wN === 1 ? '' : 's'} (beta). Adjust with the Pan tool.`, 5000);
+  if (!automatic) {
+    setMLStatus('ready', 'Openings detected', `${dN} door${dN === 1 ? '' : 's'} and ${wN} window${wN === 1 ? '' : 's'} found.`);
+    toast(`Detected ${dN} door${dN === 1 ? '' : 's'} and ${wN} window${wN === 1 ? '' : 's'} (beta). Adjust with the Select tool.`, 5000);
+  }
+  return { count: items.length, doors: dN, windows: wN };
+}
+
+// New imports automatically run the existing ML workflow in the recommended
+// order: walls first, then doors/windows snapped to those walls. All inference
+// stays on-device and the detection algorithms/models are unchanged.
+async function runAutomaticMLDetection(image) {
+  if (!image || state.image?.el !== image) return;
+  setMLStatus('running', 'Detecting walls…', 'RoomWalk is reading the imported floor plan on this device.');
+  toast('Floor plan loaded. Detecting walls, doors, and windows automatically…', 8000);
+
+  const wallResult = await runDetectWallsML({ image, automatic: true });
+  if (state.image?.el !== image) return;
+
+  setMLStatus('running', 'Detecting doors & windows…', 'Walls are ready. The openings model is running now.');
+  const openingResult = await runDetectDoorsWindowsML({ image, automatic: true });
+  if (state.image?.el !== image) return;
+
+  const wallCount = wallResult?.count || 0;
+  const doorCount = openingResult?.doors || 0;
+  const windowCount = openingResult?.windows || 0;
+  if (wallCount || openingResult?.count) {
+    const wallMethod = wallResult?.usedFallback ? 'standard fallback' : 'ML';
+    setMLStatus(
+      'ready',
+      'Detection complete',
+      `${wallCount} wall${wallCount === 1 ? '' : 's'}, ${doorCount} door${doorCount === 1 ? '' : 's'}, and ${windowCount} window${windowCount === 1 ? '' : 's'} found.`
+    );
+    toast(`Ready to review: ${wallCount} walls (${wallMethod}), ${doorCount} doors, ${windowCount} windows.`, 6500);
+    setTool('pan');
+  } else {
+    setMLStatus('error', 'Detection needs review', 'Use the left-side Wall, Door, and Window tools to finish this plan.');
+    toast('Automatic detection needs a little help on this plan. Use the drawing tools to finish it.', 5500);
+  }
 }
 
 // Opacity slider
 const opacitySlider = document.getElementById('opacity');
+const opacityOutput = document.getElementById('opacity-output');
 opacitySlider.addEventListener('input', () => {
   state.imageOpacity = parseInt(opacitySlider.value, 10) / 100;
+  if (opacityOutput) opacityOutput.textContent = `${opacitySlider.value}%`;
   emit();
 });
 
@@ -865,7 +960,9 @@ function updateScaleInfo() {
   // Prominent on-canvas panel
   const panel = document.getElementById('readout');
   if (!panel) return;
-  const show = (state.scale || state.walls.length > 0) && state.view !== 'walk';
+  // Keep the right-side summary stable even before calibration so the two scale
+  // methods are always easy to find.
+  const show = state.view !== 'walk';
   panel.hidden = !show;
   if (!show) return;
 
