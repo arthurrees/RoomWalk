@@ -4,6 +4,60 @@ Most recent first. Resume point if a chat disconnects.
 
 ---
 
+## 2026-07-23 — Live application redesign + automatic ML import workflow
+
+**Redesign shipped in the working tree.** The approved standalone concept was
+carried into the real app while preserving the existing canvas/state/3D engine:
+
+- `index.html` now uses a warm architectural-workspace shell: compact top bar,
+  deep-ink left creation rail, central 2D/3D/Walk switcher, and a persistent
+  right-side **Plan overview** inspector.
+- `styles.css`, the `view2d.js` `PAL`, and the `view3d.js` scene background/fog
+  now share paper `#F7F5EF`, ink `#24342F`, sage `#287F6A`, and coral `#DF725B`.
+- The right inspector contains:
+  - Plan summary (area, footprint, px/unit scale).
+  - Both existing scale paths: total sq ft/m² and known wall/dimension.
+  - Automatic-detection status plus manual ML retries and standard-wall fallback.
+  - Canvas appearance (units, height, opacity, grid, show hidden).
+  - Remove doors, Remove walls, and Remove everything.
+- `state.clearDoors()` removes doors only, cleans now-unused auto bridge walls,
+  and preserves windows plus structural walls. Remove walls uses the existing
+  `clearWalls()` behavior (attached openings also clear); Remove everything uses
+  `resetAll()`. Destructive actions confirm first.
+
+**Automatic import detection:** `loadImageDataUrl()` now calls
+`runAutomaticMLDetection(img)` after the new image is fitted/emitted. The sequence
+is the existing `detectWallsML()` first, then the existing
+`detectDoorsWindowsML()` against those walls. If ML returns no walls, the existing
+heuristic `detectWalls()` remains the fallback. Async results are discarded if a
+newer image replaces the import while inference is running.
+
+**ML safety invariant:** `detect.js`, `models/walls-v1.onnx`,
+`models/doors-v2.onnx`, and `vendor/ort/` were **not edited**. End-to-end browser
+verification uploaded `example floorplans/lodges_example.png`; the unchanged
+models produced **21 structural walls, 10 doors, and 6 windows** in ~2.1 seconds
+with no console/resource errors. The resulting geometry built successfully in 3D.
+
+**Scale/removal verification:**
+- Area calibration set a non-null scale from 724 sq ft.
+- Known-wall calibration set 14.9 px/ft through the existing wall-scale event.
+- Remove doors left all 6 windows and 21 structural walls.
+- Remove walls cleared walls/openings but kept the imported image.
+- Remove everything cleared the image, scale, walls, and openings.
+- DOM contract check: 71 unique IDs, every static `getElementById` reference
+  present, no duplicate/missing IDs. JS syntax and `git diff --check` pass.
+
+**Copy preference (standing):** avoid filler microcopy, decorative reassurance,
+and unnecessary little sub-explanations. Keep functional instructions, live
+results, and destructive warnings. The welcome/help privacy reassurance
+(“Detection happens privately on this device” / equivalent) was removed. Do not
+restore that style of copy.
+
+**Preview artifact:** `index-redesign-preview.html` remains an untracked,
+self-contained concept file. The real application is `index.html`.
+
+---
+
 ## 2026-06-19 — Heuristic wall detector restored as a separate option; theme finalized
 
 **Two "Detect walls" options now** (user finds the pre-ML heuristic detects better on

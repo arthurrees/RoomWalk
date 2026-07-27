@@ -34,7 +34,7 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
 
 | File | Responsibility |
 |------|----------------|
-| `index.html` | Layout: top bar, toolbar, sectioned Advanced dropdown, How-to guide, palette, readout/selection panels, three.js import map |
+| `index.html` | Layout: top bar, left creation rail, right plan inspector, guide popovers, palette, readout/selection panels, three.js import map |
 | `styles.css` | Warm architectural-workspace UI theme and responsive shell (see Theme below) |
 | `state.js` | Central `state` object + `subscribe`/`emit`; mutators (addWall, addOpening, addFurniture, setScale, replaceWalls, **setDetectedWalls** (preserves+re-homes openings onto new walls, then `healBridges` connects nearby wall ends to floating opening bridges), setDetectedOpenings, **setMLOpenings** (attach-or-bridge), `closePalette`, etc.); `state.paletteOpen` is independent of `state.tool`; `reseedIds()` after load |
 | `geom.js` | Pure geometry helpers; unit format/parse; SAT OBB overlap (`obbOverlapMTV`); gap detection (`findGap`); shared constants |
@@ -71,17 +71,17 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
   (within ~10°, `AXIS_SNAP_DEG`) and snaps to an existing corner only if that corner
   lies on the straightened line — so nearby wall endpoints (esp. after ML detection)
   don't yank the wall crooked. Walls render as bright accent strokes.
-- **Auto-detect walls — heuristic** (`Advanced → Detect walls`, `detect.js`). Threshold
+- **Auto-detect walls — heuristic** (`detect.js`). Threshold
   the image, keep only *thick long* strokes (rejects text/dimension lines via a
   min-band-thickness test), extract axis-aligned centerlines. Applied via
   `setDetectedWalls` (preserves & re-homes existing doors/windows, same as the ML path).
-  Tuned for solid-wall plans; thin double-line plans degrade to manual tracing. This is
-  the **primary** wall detector — on clean blueprints it often beats the ML model, so it's
-  the un-tagged "Detect walls" button; the ML one below is labelled "(ML, beta)".
+  Tuned for solid-wall plans; thin double-line plans degrade to manual tracing. It is
+  the automatic fallback when ML returns no walls and is also available from
+  **Automatic detection → Try standard wall detection instead** in the right panel.
 - **Build from scratch.** `Blank plan` (top bar) → a blank 1-ft world
   grid (`state.grid`); walls snap to it and scale is pre-set so dimensions are
   real-by-construction. Lets students with only a 3D/listing render rebuild a
-  clean plan. Toggle via `Advanced → Canvas → Snap to grid`. The grid + its snap
+  clean plan. Toggle via **Canvas appearance → Snap to one-foot grid**. The grid + its snap
   are **scratch-mode only** — they no-op when a blueprint image is loaded, so
   tracing an uploaded plan stays fluid (only H/V axis-straightening applies).
 - **Doors / windows.** Place tool snaps to walls; select to move (middle) or
@@ -99,13 +99,12 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
 - **Gap-bridging openings.** Hover a door/window over an open gap between two
   collinear wall ends → it auto-fits, creating a short `bridge:true` wall it
   fills (deleting the opening reopens the gap).
-- **Auto-detect doors & windows** (`Advanced → Detect doors & windows`). Gaps in
-  the detected walls are candidate openings: a light-ink glass line spanning a
-  gap ⇒ window (glass is often drawn lighter than walls, so a 2nd sensitive
-  threshold catches it); a narrow empty gap ⇒ door; a wide empty gap ⇒ left open.
-  Idempotent (re-running replaces prior auto openings, tagged `auto:true`).
-- **On-device ML detection** (`Advanced → ✨ Detect walls`, `✨ Detect doors &
-  windows`). Runs two ONNX models **in the browser** (ONNX Runtime Web, WASM —
+- **Heuristic opening detection** remains available in `detect.js` for internal
+  fallback/experimentation but is not exposed in the current UI. It classifies
+  gaps in detected walls using ink and gap width.
+- **On-device ML detection** runs automatically after every new image/PDF import.
+  Manual **Retry ML walls** and **Retry doors & windows** actions live in the
+  right plan panel. It runs two ONNX models **in the browser** (ONNX Runtime Web, WASM —
   no backend, works offline). Walls: a U-Net segmenter → wall mask → reuses the
   heuristic band/snap vectorizer. Doors/windows: a YOLOv8n detector → boxes
   snapped onto the nearest **same-orientation** wall and attached as openings, or
@@ -114,13 +113,14 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
   window ≥0.40), **oversized detections dropped** (> ~8–9 ft or > 35% of the plan —
   kills wall/dimension lines misread as windows), and single doors standardized to
   ~3 ft (`cleanWidthFt`/`DW_*` knobs at the top of `detect.js`). The
-  two buttons are **independent** — "Detect doors & windows" never detects walls;
+  The two manual retry buttons are **independent** — "Retry doors & windows" never detects walls;
   it works standalone (placing openings at the detected spots, like the spike) and
-  uses your walls only if they already exist. "Detect walls" **preserves existing
+  uses your walls only if they already exist. "Retry ML walls" **preserves existing
   openings** — `setDetectedWalls` re-homes each onto the nearest matching new wall
-  so the wall segments around it instead of covering it (order-free; recommended:
-  doors/windows first, then walls). The heuristic
-  detectors stay as the fallback. ~90% on walls, ~85% on doors/windows; dense
+  so the wall segments around it instead of covering it. The **automatic** sequence
+  is walls first, then doors/windows against those new walls; stale async results
+  are ignored if a newer image replaces the current import. The heuristic wall
+  detector stays as fallback. ~90% on walls, ~85% on doors/windows; dense
   interior closet clusters need manual cleanup. Models are trained outside this
   repo — see `C:\Users\arthu\roomwalk-ml\REFINING.md`.
 - **Scale calibration** (all converge on px/ft):
@@ -128,7 +128,7 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
      length. Clicks snap to the nearest drawn line; also axis-snap.
   2. Click a **wall** in the Scale tool and type its length.
   3. **Calibrate by area** (sq ft / m²) from the traced wall polygon.
-- **Units.** Imperial (ft/in, default) or Metric (m) — Advanced dropdown.
+- **Units.** Imperial (ft/in, default) or Metric (m) — right-side Canvas appearance.
   Internal canonical stays feet; only display/parse change.
 - **Plan panel** (right): px/ft, footprint W×H, floor area, both scale-calibration
   methods (known total area or known wall length), automatic-detection status,
@@ -192,8 +192,8 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
   3D/Walk (the drag tracks the world Y where the cursor hits the wall, via
   `wallPointFromEvent` → `mountHForHitY`), and on placement it mounts at the
   height you point to.
-- **Styling.** Floor material presets (wood/tile/carpet/concrete) + global wall
-  colour (`Advanced → Style`); **per-wall** colour (select a wall in 2D *or* 3D);
+- **Styling.** Floor material presets (wood/tile/carpet/concrete);
+  **per-wall** colour (select a wall in 2D *or* 3D);
   **per-room floors** — `view3d` flood-fills the wall-bounded space (walls incl.
   door spans are barriers), greedy-meshes each room's floor, and you click a
   room's floor in 3D to set its material. Floors use a **procedurally drawn**
@@ -215,7 +215,7 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
   near wall blocking the view or grabbing the snap. They still render as
   see-through "ghosts" (low opacity) in 3D/Walk and faintly in 2D, so you can see
   they're there and click them in any view to unhide (the panel button reads
-  **Show**). `Advanced → Canvas → Show all hidden` reveals everything at once. The
+  **Show**). **Canvas appearance → Show all hidden objects** reveals everything at once. The
   `hidden` flag persists through save/open and undo/redo.
 - **Undo / redo + autosave.** Debounced history (`Ctrl+Z` / `Ctrl+Shift+Z` or the
   ↶ ↷ buttons; a drag coalesces into one step). Autosaves to `localStorage` and
@@ -247,6 +247,10 @@ colors in CSS `:root`; the 3D scene background/fog and selection handles live in
 ## Conventions / gotchas
 
 - Re-render by mutating `state` then calling `emit()`. Don't render imperatively.
+- **UI copy preference:** avoid decorative reassurance, filler microcopy, and
+  unnecessary secondary explanations. Keep only functional instructions, live
+  state/results, and warnings needed for destructive actions. Do not restore the
+  removed “Detection happens privately on this device” style of copy.
 - `state.image` carries `{ el, w, h, outline, dataUrl }`. `dataUrl` enables Save.
 - `_clip` is a transient flag on furniture (recomputed each render; stripped on save).
 - Walk uses its own mouse handlers; 3D furniture placement uses a **capture-phase

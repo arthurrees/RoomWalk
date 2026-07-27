@@ -513,17 +513,49 @@ function buildFurnitureGroup(dims) {
       break;
     }
     case 'sofa': {
-      const seatH = h * 0.45, armW = Math.min(w * 0.12, 0.5), backD = d * 0.25;
-      g.add(box(w, seatH, d, matFurnFabric, 0, seatH / 2, 0));               // base
-      g.add(box(w, h * 0.55, backD, matFurnFabric, 0, h * 0.55 / 2 + seatH * 0.4, -d / 2 + backD / 2)); // back
-      g.add(box(armW, h * 0.55, d, matFurnFabric, -w / 2 + armW / 2, h * 0.55 / 2 + seatH * 0.3, 0));
-      g.add(box(armW, h * 0.55, d, matFurnFabric, w / 2 - armW / 2, h * 0.55 / 2 + seatH * 0.3, 0));
-      // seat cushions, one per unit
-      const innerW = w - armW * 2;
+      // Keep every part inside the catalog's exact w × d × h envelope, but use
+      // recognizable residential-sofa proportions instead of one large block.
+      const legH = Math.min(0.35, h * 0.12);
+      const frameH = Math.min(0.5, h * 0.18);
+      const cushionH = Math.min(0.65, h * 0.23);
+      const seatTop = legH + frameH + cushionH;
+      const armW = Math.min(0.75, Math.max(0.5, w * 0.09));
+      const armH = Math.min(h * 0.75, seatTop + 0.65);
+      const backD = Math.min(0.55, d * 0.18);
+      const innerW = Math.max(0.5, w - armW * 2);
+      const seatD = d * 0.68;
+      const seatZ = d / 2 - seatD / 2 - d * 0.04;
+
+      // Four short feet and a raised upholstered frame make the seat height read
+      // correctly (about 18" on the stock 34"-high sofa).
+      const footW = Math.min(0.22, innerW * 0.12);
+      const footZ = d / 2 - footW * 1.3;
+      const footX = w / 2 - armW * 0.75;
+      for (const sx of [-footX, footX]) for (const sz of [-footZ, footZ]) {
+        g.add(box(footW, legH, footW, matFurnWood, sx, legH / 2, sz));
+      }
+      g.add(box(innerW, frameH, d * 0.82, matFurnFabric, 0, legH + frameH / 2, d * 0.05));
+
+      // Full-height back and correctly elevated arms. The former proxy stopped
+      // around 25" even though the catalog height is 34".
+      g.add(box(w, h - legH, backD, matFurnFabric, 0, legH + (h - legH) / 2, -d / 2 + backD / 2));
+      const armBodyH = Math.max(0.2, armH - legH);
+      for (const sx of [-1, 1]) {
+        g.add(box(armW, armBodyH, d * 0.94, matFurnFabric,
+          sx * (w / 2 - armW / 2), legH + armBodyH / 2, d * 0.02));
+      }
+
+      // Separate seat and back cushions, one per catalog unit.
       const cw = innerW / count;
+      const backCushBottom = seatTop - cushionH * 0.18;
+      const backCushH = Math.max(0.5, h - backCushBottom - 0.15);
+      const backCushD = Math.min(0.45, d * 0.15);
       for (let i = 0; i < count; i++) {
         const cx = -innerW / 2 + (i + 0.5) * cw;
-        g.add(box(cw * 0.92, h * 0.12, d * 0.8, matFurnMattress, cx, seatH + h * 0.06, backD * 0.3));
+        g.add(box(cw * 0.92, cushionH, seatD, matFurnMattress,
+          cx, legH + frameH + cushionH / 2, seatZ));
+        g.add(box(cw * 0.9, backCushH, backCushD, matFurnMattress,
+          cx, backCushBottom + backCushH / 2, -d / 2 + backD + backCushD / 2));
       }
       break;
     }
