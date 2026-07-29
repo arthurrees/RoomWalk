@@ -42,6 +42,7 @@ const WALL_HIT_PX = 8;         // wall click hit-test radius
 const HANDLE_PX = 10;          // resize-handle visual size (screen px)
 const HANDLE_HIT_PAD = 6;      // extra hit padding around handles
 const EDGE_GRAB_FRAC = 0.28;   // fraction of opening length at each end that resizes
+const MAX_WHEEL_DELTA_PX = 120; // prevent one wheel event from jumping to a zoom limit
 
 const canvas = document.getElementById('canvas2d');
 const ctx = canvas.getContext('2d');
@@ -246,7 +247,7 @@ export function draw() {
   }
 
   // Furniture placement ghost
-  if (state.tool === 'furniture' && state.placingFurniture) {
+  if (state.tool === 'furniture' && state.placingFurniture && !dragging) {
     drawFurnitureGhost(state.placingFurniture, mouse.world.x, mouse.world.y, state.placingRot);
   }
 
@@ -874,9 +875,24 @@ canvas.addEventListener('mousedown', (e) => {
   }
 
   if (state.tool === 'furniture') {
-    // Drop the armed item, disarm + deselect, and return to Pan so the user
-    // can immediately click on the just-placed item to edit it. The palette
-    // stays open (state.paletteOpen) — pick another item to arm again.
+    // Existing items take priority over placement so the Items palette can
+    // stay open while the user alternates between adding and editing.
+    const fh = hitTestFurnitureHandle(p.x, p.y);
+    if (fh) {
+      const f = state.furniture.find(x => x.id === state.selection.id);
+      const item = f && getItem(f.type);
+      dragging = { kind: 'furniture-resize', id: state.selection.id, ...resizeAnchor(f, item, fh.edge, fh.sgn) };
+      return;
+    }
+    const hitF = hitTestFurniture(p.x, p.y);
+    if (hitF) {
+      state.selection = { kind: 'furniture', id: hitF.id };
+      dragging = { kind: 'furniture-move', id: hitF.id, offx: p.x - hitF.x, offy: p.y - hitF.y };
+      emit();
+      return;
+    }
+    // Empty space drops the armed item. The palette stays open so another
+    // catalog item can be armed without giving up access to placed items.
     if (state.placingFurniture) {
       const f = addFurniture(state.placingFurniture, p.x, p.y, state.placingRot);
       fitBetweenWalls(f);
@@ -1185,7 +1201,9 @@ canvas.addEventListener('mousemove', (e) => {
 
   // Furniture placement: ghost follows cursor
   if (state.tool === 'furniture') {
-    canvas.style.cursor = state.placingFurniture ? 'copy' : 'default';
+    const fh = hitTestFurnitureHandle(p.x, p.y);
+    const hitF = hitTestFurniture(p.x, p.y);
+    canvas.style.cursor = fh ? 'nwse-resize' : hitF ? 'move' : state.placingFurniture ? 'copy' : 'default';
     if (state.placingFurniture) draw();
     return;
   }
@@ -1274,12 +1292,22 @@ canvas.addEventListener('mouseup', () => {
 
 canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); });
 
+function normalizedWheelDelta(e) {
+  // WheelEvent deltaY may be expressed in pixels, lines, or pages depending on
+  // the browser/device. Convert it to pixels, then cap a single event so mouse
+  // wheels and high-momentum trackpads both zoom in predictable increments.
+  let delta = e.deltaY;
+  if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) delta *= 16;
+  else if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) delta *= canvas.clientHeight || 800;
+  return Math.max(-MAX_WHEEL_DELTA_PX, Math.min(MAX_WHEEL_DELTA_PX, delta));
+}
+
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   const rect = canvas.getBoundingClientRect();
   const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
   const worldBefore = s2w(sx, sy);
-  const factor = Math.exp(-e.deltaY * 0.0015);
+  const factor = Math.exp(-normalizedWheelDelta(e) * 0.0015);
   state.zoom = Math.max(0.05, Math.min(40, state.zoom * factor));
   const worldAfter = s2w(sx, sy);
   state.pan.x += (worldAfter.x - worldBefore.x) * state.zoom;

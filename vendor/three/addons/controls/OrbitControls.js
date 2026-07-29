@@ -494,8 +494,33 @@ class OrbitControls extends EventDispatcher {
 
 		function getZoomScale( delta ) {
 
-			const normalized_delta = Math.abs( delta ) / ( 100 * ( window.devicePixelRatio | 0 ) );
+			// Keep the divisor non-zero when browser zoom makes devicePixelRatio
+			// fractional (and potentially less than 1). Bitwise truncation here
+			// previously turned those values into 0 and made zoom all-or-nothing.
+			const pixelRatio = Math.max( 1, window.devicePixelRatio || 1 );
+			const normalized_delta = Math.abs( delta ) / ( 100 * pixelRatio );
 			return Math.pow( 0.95, scope.zoomSpeed * normalized_delta );
+
+		}
+
+		function getWheelDelta( event ) {
+
+			let delta = event.deltaY;
+
+			if ( event.deltaMode === WheelEvent.DOM_DELTA_LINE ) {
+
+				delta *= 16;
+
+			} else if ( event.deltaMode === WheelEvent.DOM_DELTA_PAGE ) {
+
+				delta *= scope.domElement.clientHeight || 800;
+
+			}
+
+			// Some high-momentum trackpads report very large deltas. Bounding a
+			// single event keeps zoom continuous instead of jumping between the
+			// minimum and maximum camera distances.
+			return Math.max( - 120, Math.min( 120, delta ) );
 
 		}
 
@@ -731,14 +756,15 @@ class OrbitControls extends EventDispatcher {
 		function handleMouseWheel( event ) {
 
 			updateZoomParameters( event.clientX, event.clientY );
+			const delta = getWheelDelta( event );
 
-			if ( event.deltaY < 0 ) {
+			if ( delta < 0 ) {
 
-				dollyIn( getZoomScale( event.deltaY ) );
+				dollyIn( getZoomScale( delta ) );
 
-			} else if ( event.deltaY > 0 ) {
+			} else if ( delta > 0 ) {
 
-				dollyOut( getZoomScale( event.deltaY ) );
+				dollyOut( getZoomScale( delta ) );
 
 			}
 

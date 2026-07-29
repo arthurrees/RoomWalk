@@ -947,6 +947,7 @@ function in3dOrWalk() { return state.view === '3d' || state.view === 'walk'; }
 
 function beginManip(m) {
   manip = m;
+  clearGhost();
   orbit.enabled = false;
   suppressLook = true;
 }
@@ -1018,12 +1019,14 @@ function applyManip(wp) {
 renderer.domElement.addEventListener('pointerdown', (e) => {
   if (e.button !== 0 || !in3dOrWalk()) return;
   downXY = { x: e.clientX, y: e.clientY };
-  if (state.tool === 'furniture' && state.placingFurniture) return; // drop on click (pointerup)
-  if (state.tool !== 'pan' && state.tool !== 'select') return;
+  const placingFurniture = state.tool === 'furniture';
+  const selecting = state.tool === 'pan' || state.tool === 'select';
+  if (!placingFurniture && !selecting) return;
 
   // 1. Grab a resize handle on the selected item.
   const h = raycastHandle(e);
-  if (h) {
+  // While placing, furniture handles remain active but opening handles do not.
+  if (h && (selecting || h.type === 'furn-resize')) {
     if (h.type === 'furn-resize') {
       const f = state.furniture.find(x => x.id === h.id);
       const item = f && getItem(f.type);
@@ -1042,7 +1045,11 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   //    room floors aren't draggable: they're click-selected on pointerup, so we
   //    leave the event for OrbitControls (a drag still orbits the scene).
   const body = raycastBody(e);
-  if (body && (body.kind === 'furniture' || body.kind === 'opening')) {
+  const canGrabBody = body && (
+    body.kind === 'furniture' ||
+    (selecting && body.kind === 'opening')
+  );
+  if (canGrabBody) {
     state.selection = { kind: body.kind, id: body.id };
     if (body.kind === 'furniture') {
       const f = state.furniture.find(x => x.id === body.id);
@@ -1588,7 +1595,7 @@ subscribe(() => {
   rebuildCollision();
   updateHud();
   // Keep the placement ghost in sync (e.g. rotation via R key).
-  if (in3dOrWalk() && state.tool === 'furniture' && state.placingFurniture) {
+  if (in3dOrWalk() && state.tool === 'furniture' && state.placingFurniture && !manip) {
     if (lastFloorPt) updateGhost(state.placingFurniture, state.placingRot, lastFloorPt);
   } else {
     clearGhost();
