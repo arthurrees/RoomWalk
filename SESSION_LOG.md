@@ -4,6 +4,57 @@ Most recent first. Resume point if a chat disconnects.
 
 ---
 
+## 2026-08-08 — PNG/JPEG import reliability
+
+- Confirmed the localhost build accepts both PNG and JPEG by importing
+  `example floorplans/lodges_example.png` and `316_gunson_8.jpg` in headless
+  Chromium through the welcome-screen file chooser.
+- Hardened the import handler in `app.js`: ordinary images no longer depend on
+  loading the PDF helper, FileReader errors/aborts and browser decode failures
+  now produce visible guidance, unsupported files are rejected clearly, and
+  clearing the input before reading permits immediate same-file retry.
+- Made PNG/JPEG explicit in the file picker's `accept` list while retaining
+  other browser-readable images and PDF.
+- Verification: both fixtures hid the welcome state, reset the file input, and
+  entered automatic detection with no page or console errors. `node --check
+  app.js` passes. The change is local and has not been deployed to Cloudflare.
+
+---
+
+## 2026-07-28 — Continuous zoom + edit existing furniture from Items
+
+**Zoom snapping fixed in 2D and 3D.**
+
+- Root cause of the 3D all-or-nothing behavior was the vendored OrbitControls
+  `getZoomScale`: `(window.devicePixelRatio | 0)` truncates a fractional DPR
+  below 1 to zero, so the zoom calculation divides by zero and jumps to a camera
+  distance limit. It now uses `Math.max(1, window.devicePixelRatio || 1)`.
+- Both the 2D wheel handler and OrbitControls now normalize line/page deltas to
+  pixels and cap a single wheel event at 120 px. Large trackpad momentum therefore
+  remains gradual, and reversing wheel direction reverses zoom instead of jumping
+  between the minimum and maximum.
+
+**Items palette no longer blocks existing-item editing.**
+
+- In `view2d.js`, furniture resize handles and placed furniture are hit-tested
+  before empty-space placement whenever `state.tool === 'furniture'`. Existing
+  items can be selected, moved, and resized with the palette open; if a new item
+  is armed, it remains armed and an empty-space click still places it.
+- `view3d.js` applies the same priority in 3D/Walk through the capture-phase
+  pointer pipeline. Furniture bodies/handles can start manipulation during Items
+  mode; the placement ghost is cleared/suppressed during that manipulation.
+  Opening manipulation remains limited to Pan/Select mode.
+
+**Verification:** headless Chromium exercised large opposite wheel deltas, a
+fractional DPR of 0.8, 2D item placement followed by selection/drag with Items
+open both unarmed and armed, and 3D selection/drag with Items open. Item count
+stayed at one while an armed item was bypassed to move the existing item; zoom
+returned to its starting value after equal opposite inputs. No console errors.
+`node --check` passes for `view2d.js`, `view3d.js`, and OrbitControls;
+`git diff --check` passes. Changes remain uncommitted in the working tree.
+
+---
+
 ## 2026-07-23 — Live application redesign + automatic ML import workflow
 
 **Redesign shipped in the working tree.** The approved standalone concept was

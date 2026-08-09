@@ -183,42 +183,81 @@ subscribe(() => {
 const fileInput = document.getElementById('file-input');
 fileInput.addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
-  if (!file) { fileInput.value = ''; return; }
-  try {
-    const { isPdfFile, renderPdfToImage } = await import('./pdf.js');
-    if (isPdfFile(file)) {
+  // Clear immediately so choosing the same file again still emits `change`.
+  fileInput.value = '';
+  if (!file) return;
+
+  const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+  if (isPdf) {
+    try {
+      const { renderPdfToImage } = await import('./pdf.js');
       toast('Rendering PDF…');
       const result = await renderPdfToImage(file);
-      fileInput.value = '';
       if (!result) return; // user cancelled the page picker
       loadImageDataUrl(result.dataUrl,
         result.pageCount > 1
           ? `PDF page ${result.pageNum} of ${result.pageCount} loaded.`
           : 'PDF loaded.');
       return;
+    } catch (err) {
+      console.error(err);
+      toast("Couldn't read that PDF. Try a different file or export it as PNG.", 4500);
+      return;
     }
-  } catch (err) {
-    console.error(err);
-    toast("Couldn't read that PDF. Try a different file or export it as PNG.", 4500);
-    fileInput.value = '';
+  }
+
+  const isImage = file.type.startsWith('image/')
+    || /\.(?:avif|bmp|gif|jpe?g|png|webp)$/i.test(file.name || '');
+  if (!isImage) {
+    toast('Choose a PNG, JPEG, other browser-readable image, or PDF.', 4500);
     return;
   }
-  fileInput.value = '';
-  // Image path: read as a data URL so it can be embedded when saving the project.
-  const reader = new FileReader();
-  reader.onload = () => loadImageDataUrl(reader.result, 'Floor plan loaded.');
-  reader.readAsDataURL(file);
+
+  try {
+    // Read as a data URL so the floor plan can be embedded when saving the project.
+    const dataUrl = await readFileAsDataUrl(file);
+    loadImageDataUrl(dataUrl, 'Floor plan loaded.');
+  } catch (err) {
+    console.error(err);
+    toast("Couldn't read that image. Try PNG or JPEG, or re-export the file.", 5000);
+  }
 });
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === 'string'
+      ? resolve(reader.result)
+      : reject(new Error('The selected image did not produce a data URL.'));
+    reader.onerror = () => reject(reader.error || new Error('The selected image could not be read.'));
+    reader.onabort = () => reject(new Error('The image import was cancelled.'));
+    reader.readAsDataURL(file);
+  });
+}
 
 function loadImageDataUrl(dataUrl, message) {
   const img = new Image();
-  img.onload = async () => {
-    const outline = view2d.buildOutline(img, state.outlineThreshold);
-    state.image = { el: img, w: img.naturalWidth, h: img.naturalHeight, outline, dataUrl };
-    view2d.fitImage();
-    emit();
-    if (message) toast(message);
-    await runAutomaticMLDetection(img);
+  img.onload = () => {
+    try {
+      const outline = view2d.buildOutline(img, state.outlineThreshold);
+      state.image = { el: img, w: img.naturalWidth, h: img.naturalHeight, outline, dataUrl };
+      view2d.fitImage();
+      emit();
+      if (message) toast(message);
+    } catch (err) {
+      console.error(err);
+      toast("Couldn't prepare that image. Try PNG or JPEG, or re-export the file.", 5000);
+      return;
+    }
+    runAutomaticMLDetection(img).catch(err => {
+      console.error(err);
+      setMLStatus('error', 'Detection needs review', 'The image loaded, but automatic detection stopped. Use the drawing tools to finish the plan.');
+      toast('The floor plan loaded, but automatic detection stopped. You can still trace it manually.', 5500);
+    });
+  };
+  img.onerror = () => {
+    console.error('The browser could not decode the selected image.');
+    toast("Couldn't decode that image. Try PNG or JPEG, or re-export the file.", 5000);
   };
   img.src = dataUrl;
 }

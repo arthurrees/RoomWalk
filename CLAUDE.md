@@ -62,7 +62,11 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
 - **Upload + blueprint outline.** Accepts images (PNG/JPG/etc.) **and PDFs**. PDFs
   are rendered to PNG by the vendored PDF.js (`vendor/pdfjs/`, lazy-loaded on
   first PDF upload) and then go through the same image pipeline; multi-page PDFs
-  prompt for the page. The plan is processed so dark lines → green graphite, white
+  prompt for the page. Image and PDF imports are handled independently so a PDF
+  helper failure cannot abort an ordinary image; file-read and browser-decode
+  failures show an actionable PNG/JPEG re-export message instead of failing
+  silently. The file input is cleared immediately so the same file can be retried.
+  The plan is processed so dark lines → green graphite, white
   bg → transparent. **Every new import automatically runs the existing on-device
   ML wall model first, then the existing door/window model against those walls.**
   The heuristic wall detector remains the automatic fallback when ML returns no
@@ -139,6 +143,11 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
   `findSpawn()` drops the player at the largest room's centre (not the walls' bbox
   centre, which can land on an interior wall — and since collision has no push-out,
   spawning inside a wall would pin movement while look still works).
+- **Continuous wheel zoom.** 2D and 3D convert line/page wheel deltas to pixels
+  and bound each event so high-momentum trackpads cannot jump directly between
+  zoom limits. The vendored OrbitControls uses a non-zero, fractional-safe
+  `devicePixelRatio` divisor; the old bitwise truncation turned DPR values below
+  1 into zero and made 3D zoom all-or-nothing.
 - **Furniture & fixtures.** Catalog of appliances (fridge, range, dishwasher,
   counter), bath fixtures (toilet, vanity, tub, shower), and furniture (beds,
   sofa, chairs, tables, desk, dresser, wardrobe, TV stand). Box-proxy 3D
@@ -154,7 +163,10 @@ wired via the import map in `index.html`. Central state with a tiny pub/sub; the
     pick the next item immediately. Palette visibility is driven by
     `state.paletteOpen` (independent of `state.tool`); the × in the palette
     header calls `closePalette()` to dismiss it. Switching to any non-Items
-    toolbar tool also closes the palette. R rotates, Delete removes.
+    toolbar tool also closes the palette. While Items is active, existing
+    furniture hit-testing takes priority over placement in both 2D and 3D/Walk:
+    click/drag or resize a placed item even when a new catalog item is armed;
+    clicking empty space still drops the armed item. R rotates, Delete removes.
   - **Resize behaviors:** `units` items repeat parts (sink→double sink/basins,
     sofa→more cushions, counter→more bays — the dimension stays continuous, the
     sub-count is a render threshold); `stretch` scales; `fixed` (toilet only) can't
@@ -266,7 +278,8 @@ doors/windows · gap-bridging · build-from-scratch grid · wall-mounted items
 edge-anchored resize · drag collision · undo/redo + autosave · hide objects ·
 3D realism (procedural floor textures, baseboards, ceiling, warm lighting) ·
 persistent items palette (stays open across drops; × to dismiss) · contextual
-per-tool tip popups (dismissed-forever per tool).
+per-tool tip popups (dismissed-forever per tool) · continuous cross-device wheel
+zoom · edit existing furniture while the Items placement tool is active.
 
 Next / ideas:
 1. Even richer materials — procedural wall texture / wallpaper, optional crown
